@@ -1,0 +1,102 @@
+ORG 0000H
+LJMP KEY_SCAN
+
+KEY_SCAN: ;键盘扫描使用P1口,P1.4-P1.7为列扫描,P1.0-P1.3为行扫描
+    MOV P1,#0F0H
+    JNB P1.4, LIE4
+    JNB P1.5, LIE3
+    JNB P1.6, LIE2
+    JNB P1.7, LIE1
+    SJMP KEY_SCAN
+LIE1:
+    MOV R4,#01H
+    LCALL JUDGELIE
+LIE2:
+    MOV R4,#02H
+    LCALL JUDGELIE
+LIE3:
+    MOV R4,#03H
+    LCALL JUDGELIE
+LIE4:
+    MOV R4,#04H
+    LCALL JUDGELIE
+JUDGELIE:
+    MOV P1,#0FH
+    JNB P1.0, HANG4
+    JNB P1.1, HANG3
+    JNB P1.2, HANG2
+    JNB P1.3, HANG1
+    LJMP KEY_SCAN
+HANG1:
+    MOV R5,#01H
+    LJMP KEY_END
+HANG2:
+    MOV R5,#02H
+    LJMP KEY_END
+HANG3:
+    MOV R5,#03H
+    LJMP KEY_END
+HANG4:
+    MOV R5,#04H
+    LJMP KEY_END
+KEY_END:
+    MOV A,R5
+    DEC A
+    MOV B,#04H
+    MUL AB
+    ADD A,R4
+    DEC A
+    MOV DPTR,#KEY_TABLE
+    MOVC A,@A+DPTR
+    MOV R6,A
+    LJMP KEY_SCAN
+KEY_TABLE:    ;0AH:+  0BH:-  0CH:x  0DH:/  0EH:*  0FH:# 
+    DB 01H,02H,03H,0AH,04H,05H,06H,0BH,07H,08H,09H,0CH,0EH,00H,0FH,0DH
+
+DISP_LED:
+MOV 20H,R6    ;给20H到27H的存储空间赋初值
+MOV 21H,#00H
+MOV 22H,#00H
+MOV 23H,#00H
+MOV 24H,#00H
+MOV 25H,#00H
+MOV 26H,#01H
+MOV 27H,#01H
+MOV R0,#20H
+MOV R1,#00H
+MOV R2,#08H     ;初值赋值结束
+LOOP:
+    MOV DPTR,#TND       ;获取将要点亮的数码管单位内容（段信息）
+    MOV A,@R0
+    MOVC A,@A+DPTR
+    MOV P0,A
+
+    MOV DPTR,#TWEI      ;获取将要点亮的数码管位信息
+    MOV A,R1
+    MOVC A,@A+DPTR
+    MOV P2,A
+
+    INC R0              ;数码管段和位偏移量自增
+    INC R1
+    DJNZ R2,GOON        ;判断是否完成对8位数码的完整扫描,如果未完成则继续GOON
+
+    MOV R0,#20H         ;如果已经完成了完整扫描,则重新开始扫描
+    MOV R1,#00H
+    MOV R2,#08H
+GOON:
+    LCALL DELAY         ;调用DELAY函数配合视觉暂留,实现多位数码管同时显示
+    AJMP LOOP
+DELAY:
+       mov r5,#20
+       d1:mov r6,#10
+       d2:mov r7,#5
+       djnz r7,$
+       djnz r6,d2
+       djnz r5,d1
+       ret
+;AT89C51数码管0-9,A-F编码表,不含小数点,P0口输出
+TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H
+;AT89C51数码管位选编码表
+TWEI: DB 0FEH,0FDH,0FBH,0F7H,0EFH,0DFH,0BFH,07FH
+;AT89C51数码管0-9,A-F编码表,含小数点,P0口输出
+TD: DB 08H,5EH,82H,42H,54H,41H,01H,5AH,00H,40H,10H,05H,89H,06H,81H,91H
