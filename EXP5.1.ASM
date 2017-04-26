@@ -4,7 +4,7 @@ NUM1 EQU 10H
 NUM2 EQU 20H
 MOV SP,#30H
 MOV R0,#NUM1
-
+LCALL CLEAR
 BEGIN:
 SETB F0
 MOV RS1,#0B
@@ -115,7 +115,7 @@ CLEAR:
       MOV A,R0
       MOV R1,A
       MOV R2,#09H
-  CLOOP:MOV @R1,#10H
+  CLOOP:MOV @R1,#00H
         INC R1
         DJNZ R2,CLOOP
         RET
@@ -132,13 +132,28 @@ DISP_LED:
 MOV R1,#10H
 MOV R3,#00H
 MOV R2,#09H     ;数码管需要显示的位数+1
+CLR F1
 LEDLOOP:
-    
     MOV DPTR,#TND       ;获取将要点亮的数码管段
     MOV A,@R1
+    JZ JUGZERO
     MOVC A,@A+DPTR
     MOV P0,A
-    
+    SETB F1
+    LJMP SHOWWEI
+JUGZERO:
+    JNB F1,SHOWZERO
+    INC R1
+    MOV A,@R1
+    DEC R1
+    JNZ SHOWZERO
+    MOV P0,#0FFH
+    LJMP SHOWWEI
+SHOWZERO:
+    MOV A,#00H
+    MOVC A,@A+DPTR
+    MOV P0,A
+SHOWWEI:    
     MOV DPTR,#TWEID      ;获取将要点亮的数码管位信息
     MOV A,R3
     MOVC A,@A+DPTR
@@ -207,7 +222,7 @@ CALC:
     LJMP PLUS
     SJMP $    
       
-;使用01位寄存器R0,R1,R3,将10H,20H开始的数码相加,结果存入20H
+;使用01位寄存器R0,R1,R3,将20H,10H开始的数码相加,结果存入20H
 PLUS:
       MOV RS1,#1B
       MOV RS0,#0B
@@ -216,16 +231,14 @@ PLUS:
       MOV R3,#08H        ;字节长度初始化
       CLR C
 PLUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
-     CJNE R0,#10H,PLUS1Z
-     MOV A,#00H
+     ;CJNE R0,#10H,PLUS1Z
+     ;MOV A,#00H
 PLUS1Z:
-     MOV A,@R0
-     
-     CJNE R1,#10H,PLUS2Z
-     ADDC A,#00H
+     MOV A,@R0    
+     ;CJNE R1,#10H,PLUS2Z
+     ;ADDC A,#00H
 PLUS2Z:
-     ADDC A,@R1
-     
+     ADDC A,@R1    
      DA A               ;十进制数数位相加，进行二-十进制调整
      MOV @R0,A          ;暂存十进制数数位相加结果
      CLR C              ;清空CY，为接下来的判断做准备
