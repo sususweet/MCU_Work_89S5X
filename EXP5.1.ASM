@@ -4,9 +4,11 @@ NUM1 EQU 10H
 NUM2 EQU 20H
 MOV SP,#30H
 MOV R0,#NUM1
+
+BEGIN:
+SETB F0
 MOV RS1,#0B
 MOV RS0,#0B
-LCALL CLEAR
 KEY_SCAN: ;键盘扫描使用P1口,P1.4-P1.7为列扫描,P1.0-P1.3为行扫描
     MOV P1,#0F0H
     JNB P1.4, LIE4
@@ -56,6 +58,11 @@ HANG4:
     MOV R5,#04H
     LJMP KEY_END
 KEY_END:
+    JNB F0,KEYOLD
+    MOV R0,#NUM1
+    LCALL CLEAR
+    CLR F0
+  KEYOLD:
     MOV A,R5
     DEC A
     MOV B,#04H
@@ -65,6 +72,9 @@ KEY_END:
     MOV DPTR,#KEY_TABLE  ;查表获得实际按键
     MOVC A,@A+DPTR
     
+    CJNE A,#0FH,KEY_NEXT
+    LJMP CAL
+KEY_NEXT:
     CLR C
     CJNE A,#09H,ISOPER
 ISNUM:
@@ -79,17 +89,25 @@ ISNUM:
 ISOPER:
     JC ISNUM
     CLR C
-    SUBB A,#09H
+    SUBB A,#10
     PUSH A
+    
+    MOV RS1,#0B
+    MOV RS0,#1B
+    MOV R0,#10H
+    MOV R1,#20H
+    LCALL MEMMOVE
+    MOV RS1,#0B
+    MOV RS0,#0B
+    MOV R0,#NUM1
+    LCALL CLEAR
+    
+    
     LJMP KEYEND
 KEYEND:
     LJMP KEY_SCAN
 KEY_TABLE:    ;0AH:+  0BH:-  0CH:x  0DH:/  0EH:*  0FH:#
     DB 01H,02H,03H,0AH,04H,05H,06H,0BH,07H,08H,09H,0CH,0EH,00H,0FH,0DH
-OPER:
-     LJMP PLUS
-     LJMP $
-
 
 
 ;R0为清空的开始位，CLEAR子程序将从R0开始的8位数码清空
@@ -100,11 +118,6 @@ CLEAR:
   CLOOP:MOV @R1,#10H
         INC R1
         DJNZ R2,CLOOP
-      MOV R1,#10H
-      MOV R2,#09H
-  CLOOP2:MOV @R1,#10H
-        INC R1
-        DJNZ R2,CLOOP2
         RET
 
 DISP_LED:
@@ -120,6 +133,7 @@ MOV R1,#10H
 MOV R3,#00H
 MOV R2,#09H     ;数码管需要显示的位数+1
 LEDLOOP:
+    
     MOV DPTR,#TND       ;获取将要点亮的数码管段
     MOV A,@R1
     MOVC A,@A+DPTR
@@ -172,24 +186,53 @@ RLCBIT:
        MOV RS0,#0B
        RET
 
+;MEMMOVE 将R0开头的数据移动到R1开始的存储单元，数据共8位
+MEMMOVE:
+        MOV R2,#09H 
+  MEMLOOP:
+          MOV A,@R0
+          MOV @R1,A
+          INC R0
+          INC R1
+          DJNZ R2,MEMLOOP
+          RET
+   
+CAL:
+    POP A
+    RL A
+    ADD A,ACC
+    MOV DPTR,#CALC
+    JMP @A+DPTR
+CALC:
+    LJMP PLUS
+    SJMP $    
+      
 ;使用01位寄存器R0,R1,R3,将10H,20H开始的数码相加,结果存入20H
 PLUS:
-      MOV RS1,#0B
-      MOV RS0,#1B
-      MOV R0,#10H       ;十进制数存放地址初始化
-      MOV R1,#20H
+      MOV RS1,#1B
+      MOV RS0,#0B
+      MOV R0,#20H       ;十进制数存放地址初始化
+      MOV R1,#10H
       MOV R3,#08H        ;字节长度初始化
       CLR C
 PLUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
+     CJNE R0,#10H,PLUS1Z
+     MOV A,#00H
+PLUS1Z:
      MOV A,@R0
+     
+     CJNE R1,#10H,PLUS2Z
+     ADDC A,#00H
+PLUS2Z:
      ADDC A,@R1
+     
      DA A               ;十进制数数位相加，进行二-十进制调整
      MOV @R0,A          ;暂存十进制数数位相加结果
      CLR C              ;清空CY，为接下来的判断做准备
      SUBB A, #10H
      JNC PLUSFIX        ;判断数位相加是否大于等于10，若条件满足则进位，否则清空CY标志位
      CLR C
-     LCALL PLUSFIN
+     LJMP PLUSFIN
 PLUSFIX:
      MOV @R0,A          ;CY置位，为进位做准备
      SETB C
@@ -198,8 +241,14 @@ PLUSFIN:
      INC R1
      DJNZ R3,PLUSLOOP
      MOV RS1,#0B
+     MOV RS0,#1B
+     MOV R0,#20H
+     MOV R1,#10H
+     LCALL MEMMOVE
+     MOV RS1,#0B
      MOV RS0,#0B
-     RET
+     LJMP BEGIN
+     ;RET
 
 
 ;AT89C51数码管0-9,A-F编码表,不含小数点,P0口输出
