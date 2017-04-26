@@ -1,6 +1,9 @@
 ORG 0000H
 ;LJMP START
-MOV R0,#20H
+NUM1 EQU 10H
+NUM2 EQU 20H
+MOV SP,#30H
+MOV R0,#NUM1
 MOV RS1,#0B
 MOV RS0,#0B
 LCALL CLEAR
@@ -61,18 +64,38 @@ KEY_END:
     DEC A                ;计算键值在表中的偏移量
     MOV DPTR,#KEY_TABLE  ;查表获得实际按键
     MOVC A,@A+DPTR
+    
+    CLR C
+    CJNE A,#09H,ISOPER
+ISNUM:
+    PUSH A    
+    LCALL RLCBIT
+    POP A
     MOV @R0,A   ;MOV 20H,A
     INC R0
-    LCALL RLCBIT
-    CJNE R0,#29H,KEY_SCAN
-    MOV R0,#20H
-    ;LCALL CLEAR
+    CJNE R0,#19H,KEYEND
+    MOV R0,#NUM1
+    LJMP KEYEND
+ISOPER:
+    JC ISNUM
+    CLR C
+    SUBB A,#09H
+    PUSH A
+    LJMP KEYEND
+KEYEND:
     LJMP KEY_SCAN
 KEY_TABLE:    ;0AH:+  0BH:-  0CH:x  0DH:/  0EH:*  0FH:#
     DB 01H,02H,03H,0AH,04H,05H,06H,0BH,07H,08H,09H,0CH,0EH,00H,0FH,0DH
+OPER:
+     LJMP PLUS
+     LJMP $
 
+
+
+;R0为清空的开始位，CLEAR子程序将从R0开始的8位数码清空
 CLEAR:
-      MOV R1,#20H
+      MOV A,R0
+      MOV R1,A
       MOV R2,#09H
   CLOOP:MOV @R1,#10H
         INC R1
@@ -93,15 +116,15 @@ DISP_LED:
 ;MOV 25H,#06H
 ;MOV 26H,#07H
 ;MOV 27H,#08H
-MOV R1,#21H
+MOV R1,#10H
 MOV R3,#00H
-MOV R2,#09H     ;初值赋值结束
+MOV R2,#09H     ;数码管需要显示的位数+1
 LEDLOOP:
     MOV DPTR,#TND       ;获取将要点亮的数码管段
     MOV A,@R1
     MOVC A,@A+DPTR
     MOV P0,A
-
+    
     MOV DPTR,#TWEID      ;获取将要点亮的数码管位信息
     MOV A,R3
     MOVC A,@A+DPTR
@@ -110,7 +133,6 @@ LEDLOOP:
     INC R1              ;数码管段和位偏移量自增
     INC R3
     DJNZ R2,GOON        ;判断是否完成对8位数码的完整扫描,如果未完成则继续GOON
-
     RET
     ;MOV R0,#20H         ;如果已经完成了完整扫描,则重新开始扫描
     ;;MOV R1,#00H
@@ -137,19 +159,20 @@ DEL10MS:
 RLCBIT:
        MOV RS1,#0B
        MOV RS0,#1B
-       MOV R0,#28H
-       MOV R1,#27H
+       MOV R0,#18H
+       MOV R1,#17H
   RLCLOOP:
        MOV A,@R1
        MOV @R0,A
        DEC R0
        DEC R1
-       CJNE R1,#1FH,RLCLOOP
+       CJNE R1,#0FH,RLCLOOP
+       MOV 10H,#10H
        MOV RS1,#0B
        MOV RS0,#0B
        RET
 
-;使用01位寄存器R0,R1,R3,将10H,20H开始的数码相加,结果存入10H
+;使用01位寄存器R0,R1,R3,将10H,20H开始的数码相加,结果存入20H
 PLUS:
       MOV RS1,#0B
       MOV RS0,#1B
@@ -177,7 +200,7 @@ PLUSFIN:
      MOV RS1,#0B
      MOV RS0,#0B
      RET
-     
+
 
 ;AT89C51数码管0-9,A-F编码表,不含小数点,P0口输出
 TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H,0FFH
