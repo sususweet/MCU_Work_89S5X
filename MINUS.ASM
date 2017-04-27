@@ -9,17 +9,20 @@ MINUS:
       CLR C
 MINUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
      MOV A,@R0
+MINUSCON:
      SUBB A,@R1
+     JC MINUSFIX
      MOV @R0,A          ;暂存十进制数数位相加结果
                    ;清空CY，为接下来的判断做准备
+     LJMP MINUSFIN
+MINUSFIX:
+     ADD A,#10
+     MOV @R0,A
      LJMP MINUSFIN
 ;SUBB A, #10H
      ;JNC MINUSFIX        ;判断数位相加是否大于等于10，若条件满足则进位，否则清空CY标志位
      ;CLR C
-     LJMP MINUSFIN
-MINUSFIX:
-     MOV @R0,A          ;CY置位，为进位做准备
-     SETB C
+     ;LJMP MINUSFIN
 MINUSFIN:
      INC R0             ;循环遍历
      INC R1
