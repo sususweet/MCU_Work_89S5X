@@ -214,8 +214,9 @@ MEMMOVE:
 
 CAL:
     POP A
+    MOV R7,A
     RL A
-    ADD A,ACC
+    ADD A,R7
     MOV DPTR,#CALC
     JMP @A+DPTR
 CALC:
@@ -263,6 +264,7 @@ PLUSFIN:
      MOV RS0,#0B
      LJMP BEGIN
 
+;使用01位寄存器R0,R1,R3,将20H,10H开始的数码相减,结果存入10H
 MINUS:
       MOV RS1,#1B
       MOV RS0,#0B
@@ -277,16 +279,11 @@ MINUSCON:
      SUBB A,@R1
      JC MINUSFIX
      MOV @R0,A          ;暂存十进制数数位相加结果
-                   ;清空CY，为接下来的判断做准备
      LJMP MINUSFIN
 MINUSFIX:
      ADD A,#10
      MOV @R0,A
      LJMP MINUSFIN
-;SUBB A, #10H
-     ;JNC MINUSFIX        ;判断数位相加是否大于等于10，若条件满足则进位，否则清空CY标志位
-     ;CLR C
-     ;LJMP MINUSFIN
 MINUSFIN:
      INC R0             ;循环遍历
      INC R1
@@ -300,11 +297,10 @@ MEM1:
      MOV R0,#20H
      MOV R1,#10H
      LCALL MEMMOVE
+     LJMP BEGIN
 MEM2:
-     MOV RS1,#0B
-     MOV RS0,#0B
      MOV 17H,#17
-     LJMP BEGIN      ;减法程序结束
+     LJMP BEGIN             ;程序结束
 GETMAX:
      MOV RS1,#1B
      MOV RS0,#1B
@@ -314,28 +310,31 @@ GETMAX:
    GETLOOP:
      MOV A,@R0
      CLR C
-     SUBB A,@R1
+     SUBB A,@R1 
      JC GETFINAL
+     JNZ GET2
      DEC R0
      DEC R1
      DJNZ R2,GETLOOP
+     LJMP GET2
    GETFINAL:
-     JNC FINAL
      MOV RS1,#1B
      MOV RS0,#0B
      MOV R0,#10H
      MOV R1,#20H
      MOV R4,#01H
      RET
-   FINAL:
+   GET2:
      MOV RS1,#1B
      MOV RS0,#0B
+     MOV R0,#20H
+     MOV R1,#10H
      MOV R4,#00H
      RET
 
 
 ;AT89C51数码管0-9,A-F编码表,不含小数点,P0口输出
-TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H,0FFH,08H
+TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H,0FFH,0F7H
 ;AT89C51数码管位选编码表
 TWEI: DB 0FEH,0FDH,0FBH,0F7H,0EFH,0DFH,0BFH,07FH
 TWEID: DB 07FH,0BFH,0DFH,0EFH,0F7H,0FBH,0FDH,0FEH

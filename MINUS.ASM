@@ -37,9 +37,8 @@ MEM1:
      MOV R0,#20H
      MOV R1,#10H
      LCALL MEMMOVE
+     SJMP $
 MEM2:
-     MOV RS1,#0B
-     MOV RS0,#0B
      MOV 17H,#17
      SJMP $             ;程序结束
 GETMAX:
@@ -51,22 +50,25 @@ GETMAX:
    GETLOOP:
      MOV A,@R0
      CLR C
-     SUBB A,@R1
+     SUBB A,@R1 
      JC GETFINAL
+     JNZ GET2
      DEC R0
      DEC R1
      DJNZ R2,GETLOOP
+     LJMP GET2
    GETFINAL:
-     JNC FINAL 
      MOV RS1,#1B
      MOV RS0,#0B
      MOV R0,#10H
      MOV R1,#20H
      MOV R4,#01H
      RET
-   FINAL:
+   GET2:
      MOV RS1,#1B
      MOV RS0,#0B
+     MOV R0,#20H
+     MOV R1,#10H
      MOV R4,#00H
      RET
  ;MEMMOVE 将R0开头的数据移动到R1开始的存储单元，数据共8位
