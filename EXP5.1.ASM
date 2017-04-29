@@ -2,6 +2,7 @@ ORG 0000H
 ;LJMP START
 NUM1 EQU 10H
 NUM2 EQU 20H
+mov IE,#00000000b
 MOV SP,#30H
 MOV R0,#NUM1
 LCALL CLEAR
@@ -129,39 +130,52 @@ DISP_LED:
 ;MOV 25H,#06H
 ;MOV 26H,#07H
 ;MOV 27H,#08H
-MOV R1,#10H
+MOV R1,#17H
 MOV R3,#00H
-MOV R2,#09H     ;数码管需要显示的位数+1
+MOV R2,#08H     ;数码管需要显示的位数+1
 CLR F1
 LEDLOOP:
     MOV DPTR,#TND       ;获取将要点亮的数码管段
     MOV A,@R1
     JZ JUGZERO
+    CJNE A,#17,NOTSHOWZ
     MOVC A,@A+DPTR
-    MOV P0,A
+    MOV P3,A
+    LJMP SHOWWEI
+NOTSHOWZ:
+    MOVC A,@A+DPTR
+    MOV P3,A
     SETB F1
     LJMP SHOWWEI
 JUGZERO:
-    JNB F1,SHOWZERO
-    INC R1
-    MOV A,@R1
-    DEC R1
-    JNZ SHOWZERO
-    MOV P0,#0FFH
+    JB F1,SHOWZERO
+    ;DEC R1
+    ;MOV A,@R1
+    ;INC R1
+    ;JNZ SHOWZERO
+    MOV P3,#0FFH
     LJMP SHOWWEI
 SHOWZERO:
     MOV A,#00H
     MOVC A,@A+DPTR
-    MOV P0,A
+    MOV P3,A
 SHOWWEI:
-    MOV DPTR,#TWEID      ;获取将要点亮的数码管位信息
+    MOV DPTR,#TWEI      ;获取将要点亮的数码管位信息
     MOV A,R3
     MOVC A,@A+DPTR
     MOV P2,A
 
-    INC R1              ;数码管段和位偏移量自增
+    DEC R1              ;数码管段和位偏移量自增
     INC R3
     DJNZ R2,GOON        ;判断是否完成对8位数码的完整扫描,如果未完成则继续GOON
+    JNB F1,ONEZERO
+    RET
+ONEZERO:
+    MOV DPTR,#TND
+    MOV A,#00H
+    MOVC A,@A+DPTR
+    MOV P3,A
+	LCALL DELAY
     RET
     ;MOV R0,#20H         ;如果已经完成了完整扫描,则重新开始扫描
     ;;MOV R1,#00H
@@ -310,7 +324,7 @@ GETMAX:
    GETLOOP:
      MOV A,@R0
      CLR C
-     SUBB A,@R1 
+     SUBB A,@R1
      JC GETFINAL
      JNZ GET2
      DEC R0
@@ -333,10 +347,10 @@ GETMAX:
      RET
 
 
-;AT89C51数码管0-9,A-F编码表,不含小数点,P0口输出
+;AT89C51数码管0-9,A-F编码表,不含小数点,P3口输出
 TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H,0FFH,0F7H
 ;AT89C51数码管位选编码表
 TWEI: DB 0FEH,0FDH,0FBH,0F7H,0EFH,0DFH,0BFH,07FH
 TWEID: DB 07FH,0BFH,0DFH,0EFH,0F7H,0FBH,0FDH,0FEH
-;AT89C51数码管0-9,A-F编码表,含小数点,P0口输出
+;AT89C51数码管0-9,A-F编码表,含小数点,P3口输出
 TD: DB 08H,5EH,82H,42H,54H,41H,01H,5AH,00H,40H,10H,05H,89H,06H,81H,91H
