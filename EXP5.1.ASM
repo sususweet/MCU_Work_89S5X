@@ -6,6 +6,8 @@ mov IE,#00000000b
 MOV SP,#30H
 MOV R0,#NUM1
 LCALL CLEAR
+MOV R0,#NUM2
+LCALL CLEAR
 BEGIN:
 SETB F0
 MOV RS1,#0B
@@ -238,22 +240,26 @@ CALC:
     LJMP MINUS
     SJMP $
 
-;使用01位寄存器R0,R1,R3,将20H,10H开始的数码相加,结果存入20H
+;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相加,结果存入10H
 PLUS:
       MOV RS1,#1B
       MOV RS0,#0B
       MOV R0,#20H       ;十进制数存放地址初始化
       MOV R1,#10H
+      LCALL PLUSFUN
+      MOV RS1,#0B
+      MOV RS0,#1B
+      MOV R0,#20H
+      MOV R1,#10H
+      LCALL MEMMOVE
+      LJMP BEGIN
+
+;加法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3, R0存被加数,R1存加数
+PLUSFUN:
       MOV R3,#08H        ;字节长度初始化
       CLR C
 PLUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
-     ;CJNE R0,#10H,PLUS1Z
-     ;MOV A,#00H
-PLUS1Z:
      MOV A,@R0
-     ;CJNE R1,#10H,PLUS2Z
-     ;ADDC A,#00H
-PLUS2Z:
      ADDC A,@R1
      DA A               ;十进制数数位相加，进行二-十进制调整
      MOV @R0,A          ;暂存十进制数数位相加结果
@@ -269,23 +275,33 @@ PLUSFIN:
      INC R0             ;循环遍历
      INC R1
      DJNZ R3,PLUSLOOP
+     RET
+
+;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相减,结果存入10H
+MINUS:
+     MOV RS1,#1B
+     MOV RS0,#0B
+     MOV R0,#20H       ;十进制数存放地址初始化
+     MOV R1,#10H
+	 MOV R3,#08H        ;字节长度初始化
+     LCALL GETMAX
+	 LCALL MINUSFUN
+     MOV A,R4
+     JZ MEM1
+     JNZ MEM2
+MEM1:
      MOV RS1,#0B
      MOV RS0,#1B
      MOV R0,#20H
      MOV R1,#10H
      LCALL MEMMOVE
-     MOV RS1,#0B
-     MOV RS0,#0B
      LJMP BEGIN
+MEM2:
+     MOV 17H,#17
+     LJMP BEGIN             ;程序结束
 
-;使用01位寄存器R0,R1,R3,将20H,10H开始的数码相减,结果存入10H
-MINUS:
-      MOV RS1,#1B
-      MOV RS0,#0B
-      MOV R0,#20H       ;十进制数存放地址初始化
-      MOV R1,#10H
-      MOV R3,#08H        ;字节长度初始化
-      LCALL GETMAX
+;减法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3,R0存被减数,R1存减数
+MINUSFUN:
       CLR C
 MINUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
      MOV A,@R0
@@ -302,19 +318,7 @@ MINUSFIN:
      INC R0             ;循环遍历
      INC R1
      DJNZ R3,MINUSLOOP
-     MOV A,R4
-     JZ MEM1
-     JNZ MEM2
-MEM1:
-     MOV RS1,#0B
-     MOV RS0,#1B
-     MOV R0,#20H
-     MOV R1,#10H
-     LCALL MEMMOVE
-     LJMP BEGIN
-MEM2:
-     MOV 17H,#17
-     LJMP BEGIN             ;程序结束
+     RET
 GETMAX:
      MOV RS1,#1B
      MOV RS0,#1B
@@ -331,18 +335,20 @@ GETMAX:
      DEC R1
      DJNZ R2,GETLOOP
      LJMP GET2
-   GETFINAL:
+   GETFINAL:	;如果是负数，则交换相减顺序
      MOV RS1,#1B
      MOV RS0,#0B
-     MOV R0,#10H
-     MOV R1,#20H
+     MOV A,R0
+     MOV B,R1
+     MOV R0,B
+     MOV R1,A
      MOV R4,#01H
      RET
    GET2:
      MOV RS1,#1B
      MOV RS0,#0B
-     MOV R0,#20H
-     MOV R1,#10H
+     ;MOV R0,#20H
+     ;MOV R1,#10H
      MOV R4,#00H
      RET
 
