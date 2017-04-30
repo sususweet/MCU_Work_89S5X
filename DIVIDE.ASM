@@ -1,5 +1,5 @@
 ORG 0000H
-;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相除,结果存入20H
+;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相除,结果存入10H
 DIVIDE:
       MOV RS1,#0B    ;商和余数寄存器初始化
       MOV RS0,#1B
@@ -8,17 +8,17 @@ DIVIDE:
       MOV R0,#30H
       LCALL CLEAR
       MOV 30H,#1
-      
+
       MOV RS1,#0B
       MOV RS0,#1B
       MOV R7,#03
-RBITLOOP:      
+RBITLOOP:
       MOV R0,#28H
       MOV R1,#27H
       MOV R2,#08H    ;移动次数
       LCALL RLCBIT
       DJNZ R7,RBITLOOP
-      
+
       MOV RS1,#0B
       MOV RS0,#0B
 
@@ -53,20 +53,20 @@ DIVIDELOOP:
       MOV A,R4
 
       JZ DIVIDELOOP
-      
+
       MOV A,#40H
       ADD A,#3
       MOV R0,A
       MOV A,@R0
       ADD A,#0F0H
       MOV @R0,A
- 
+
       MOV RS1,#0B
       MOV RS0,#1B
       MOV R0,#40H
-      MOV R1,#20H
+      MOV R1,#10H
       LCALL MEMMOVE
-      
+
       SJMP $
 
 ;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相加,结果存入10H

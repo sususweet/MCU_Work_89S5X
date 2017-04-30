@@ -143,7 +143,7 @@ DISP_LED:
 ;MOV 27H,#08H
 MOV R1,#17H
 MOV R3,#00H
-MOV R2,#08H     ;数码管需要显示的位数+1
+MOV R2,#09H     ;数码管需要显示的位数+1
 CLR F1
 LEDLOOP:
     MOV DPTR,#TND       ;获取将要点亮的数码管段
@@ -190,14 +190,14 @@ SHOWWEI:
     INC R3
     DJNZ R2,GOON        ;判断是否完成对8位数码的完整扫描,如果未完成则继续GOON
     JNB F1,ONEZERO
-    AJMP LEDLOOP
+    RET
 ONEZERO:
     MOV DPTR,#TND
     MOV A,#00H
     MOVC A,@A+DPTR
     MOV P3,A
     LCALL DELAY
-    AJMP LEDLOOP
+    RET
     ;MOV R0,#20H         ;如果已经完成了完整扫描,则重新开始扫描
     ;;MOV R1,#00H
     ;MOV R2,#08H
@@ -227,7 +227,7 @@ RLCBIT:
        DEC R0
        DEC R1
        DJNZ R2,RLCLOOP
-       MOV R1,#00H
+       MOV @R0,#00H
        RET
 
 ;MEMMOVE 将R0开头的数据移动到R1开始的存储单元，数据共8位
@@ -251,6 +251,8 @@ CAL:
 CALC:
     LJMP PLUS
     LJMP MINUS
+    LJMP MULTI
+	LJMP DIVIDE
     SJMP $
 
 ;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相加,结果存入10H
@@ -268,7 +270,7 @@ PLUS:
       LCALL MEMMOVE
       LJMP BEGIN
 
-;加法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3, R0存被加数,R1存加数
+;加法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3, R0存被加数,R1存加数, 结果存R0开始的单元
 PLUSFUN:
       CLR C
 PLUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
@@ -320,9 +322,9 @@ MEM2:
      MOV 17H,#17
      LJMP BEGIN             ;程序结束
 
-;减法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3,R0存被减数,R1存减数
+;减法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3, R0存被减数, R1存减数, R3存数码个数
 MINUSFUN:
-      CLR C
+     CLR C
 MINUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
      MOV A,@R0
 MINUSCON:
@@ -339,6 +341,124 @@ MINUSFIN:
      INC R1
      DJNZ R3,MINUSLOOP
      RET
+
+;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相乘,结果存入10H
+MULTI:
+      MOV RS1,#1B
+      MOV RS0,#0B
+      MOV R0,#20H
+      MOV R1,#10H
+      MOV R3,#08H
+
+      MOV RS1,#0B
+      MOV RS0,#1B
+      MOV R0,#10H
+      MOV R1,#40H
+      LCALL MEMMOVE
+      MOV R0,#20H
+      MOV R1,#10H
+      LCALL MEMMOVE
+      MOV R0,#50H
+      LCALL CLEAR
+      MOV 50H,#1
+
+      MOV RS1,#1B
+      MOV RS0,#0B
+
+      MOV R0,#40H
+      MOV R1,#50H
+      MOV R3,#08H        ;字节长度初始化
+      LCALL MINUSFUN
+MULTILOOP:
+      MOV RS1,#1B
+      MOV RS0,#0B
+
+      MOV R0,#40H
+      MOV R1,#50H
+      MOV R3,#08H        ;字节长度初始化
+      LCALL MINUSFUN
+
+      MOV R0,#20H
+      MOV R1,#10H
+      MOV R3,#08H
+      LCALL PLUSFUN
+
+
+      MOV RS1,#0B
+      MOV RS0,#1B
+      MOV R0,#40H
+      LCALL ISZERO
+      MOV A,R4
+      JZ MULTILOOP
+      
+      MOV RS1,#0B
+      MOV RS0,#1B
+      MOV R0,#20H
+      MOV R1,#10H
+      LCALL MEMMOVE
+      LJMP BEGIN
+
+;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相除,结果存入10H
+DIVIDE:
+      MOV RS1,#0B    ;商和余数寄存器初始化
+      MOV RS0,#1B
+      MOV R0,#40H
+      LCALL CLEAR
+      MOV R0,#50H
+      LCALL CLEAR
+      MOV 50H,#1
+
+      MOV RS1,#0B
+      MOV RS0,#1B
+      MOV R7,#03
+RBITLOOP:
+      MOV R0,#28H
+      MOV R1,#27H
+      MOV R2,#08H    ;移动次数
+      LCALL RLCBIT
+      DJNZ R7,RBITLOOP
+
+      MOV RS1,#0B
+      MOV RS0,#0B
+DIVIDELOOP:
+      MOV RS1,#1B
+      MOV RS0,#0B
+
+      MOV R0,#20H
+      MOV R1,#10H
+      MOV R3,#08H        ;字节长度初始化
+      LCALL MINUSFUN
+
+      MOV R0,#40H
+      MOV R1,#50H
+      MOV R3,#08H
+      LCALL PLUSFUN
+
+      MOV RS1,#1B
+      MOV RS0,#1B
+      MOV R0,#27H
+      MOV R1,#17H
+      MOV R2,#08H
+      LCALL GETMAX
+      MOV A,R4
+
+      JZ DIVIDELOOP
+
+      MOV A,#40H
+      ADD A,#3
+      MOV R0,A
+      MOV A,@R0
+      ADD A,#0F0H
+      MOV @R0,A
+
+      MOV RS1,#0B
+      MOV RS0,#1B
+      MOV R0,#40H
+      MOV R1,#10H
+      LCALL MEMMOVE
+
+      LJMP BEGIN
+
 GETMAX:
    GETLOOP:
      MOV A,@R0
@@ -362,11 +482,24 @@ GETMAX:
    GET2:
      MOV RS1,#1B
      MOV RS0,#0B
-     ;MOV R0,#20H
-     ;MOV R1,#10H
+     MOV R0,#20H
+     MOV R1,#10H
      MOV R4,#00H
      RET
-
+ISZERO:
+      MOV A,R0
+      MOV R1,A
+      MOV R2,#08H
+  ZEROLOOP:MOV A,@R1
+           DEC R2
+           INC R1
+           CJNE R2,#00H,ZERO2
+           MOV R4,#01H
+           RET
+	ZERO2:
+           JZ ZEROLOOP
+           MOV R4,#00H
+           RET
 
 ;AT89C51数码管0-9,A-F编码表,不含小数点,P3口输出
 TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H,0FFH,0F7H
