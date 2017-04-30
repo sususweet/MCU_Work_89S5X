@@ -82,7 +82,16 @@ KEY_NEXT:
     CJNE A,#09H,ISOPER
 ISNUM:
     PUSH A
+
+    MOV RS1,#0B
+    MOV RS0,#1B
+    MOV R0,#18H
+    MOV R1,#17H
+    MOV R2,#08H
     LCALL RLCBIT
+    MOV RS1,#0B
+    MOV RS0,#0B
+
     POP A
     MOV @R0,A   ;MOV 20H,A
     INC R0
@@ -202,19 +211,13 @@ DEL10MS:
        djnz r5,d3
        ret
 RLCBIT:
-       MOV RS1,#0B
-       MOV RS0,#1B
-       MOV R0,#18H
-       MOV R1,#17H
   RLCLOOP:
        MOV A,@R1
        MOV @R0,A
        DEC R0
        DEC R1
-       CJNE R1,#0FH,RLCLOOP
-       MOV 10H,#10H
-       MOV RS1,#0B
-       MOV RS0,#0B
+       DJNZ R2,#00H,RLCLOOP
+       MOV R1,#00H
        RET
 
 ;MEMMOVE 将R0开头的数据移动到R1开始的存储单元，数据共8位
@@ -246,6 +249,7 @@ PLUS:
       MOV RS0,#0B
       MOV R0,#20H       ;十进制数存放地址初始化
       MOV R1,#10H
+      MOV R3,#08H        ;字节长度初始化
       LCALL PLUSFUN
       MOV RS1,#0B
       MOV RS0,#1B
@@ -256,7 +260,6 @@ PLUS:
 
 ;加法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3, R0存被加数,R1存加数
 PLUSFUN:
-      MOV R3,#08H        ;字节长度初始化
       CLR C
 PLUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
      MOV A,@R0
@@ -283,9 +286,16 @@ MINUS:
      MOV RS0,#0B
      MOV R0,#20H       ;十进制数存放地址初始化
      MOV R1,#10H
-	 MOV R3,#08H        ;字节长度初始化
+     MOV R3,#08H        ;字节长度初始化
+
+	 MOV RS1,#1B
+     MOV RS0,#1B
+     MOV R0,#27H
+     MOV R1,#17H
+     MOV R2,#08H
      LCALL GETMAX
-	 LCALL MINUSFUN
+
+     LCALL MINUSFUN
      MOV A,R4
      JZ MEM1
      JNZ MEM2
@@ -320,11 +330,6 @@ MINUSFIN:
      DJNZ R3,MINUSLOOP
      RET
 GETMAX:
-     MOV RS1,#1B
-     MOV RS0,#1B
-     MOV R0,#27H
-     MOV R1,#17H
-     MOV R2,#08H
    GETLOOP:
      MOV A,@R0
      CLR C
