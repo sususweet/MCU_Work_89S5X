@@ -149,7 +149,17 @@ LEDLOOP:
     MOV DPTR,#TND       ;获取将要点亮的数码管段
     MOV A,@R1
     JZ JUGZERO
+    CJNE A,#0EFH,SHOWPOINT
+SHOWON:
     CJNE A,#17,NOTSHOWZ
+    MOVC A,@A+DPTR
+    MOV P3,A
+    LJMP SHOWWEI
+SHOWPOINT:
+    JC SHOWON
+    CLR C
+    SUBB A,#0F0H
+    MOV DPTR,#TD
     MOVC A,@A+DPTR
     MOV P3,A
     LJMP SHOWWEI
@@ -180,14 +190,14 @@ SHOWWEI:
     INC R3
     DJNZ R2,GOON        ;判断是否完成对8位数码的完整扫描,如果未完成则继续GOON
     JNB F1,ONEZERO
-    RET
+    AJMP LEDLOOP
 ONEZERO:
     MOV DPTR,#TND
     MOV A,#00H
     MOVC A,@A+DPTR
     MOV P3,A
-	LCALL DELAY
-    RET
+    LCALL DELAY
+    AJMP LEDLOOP
     ;MOV R0,#20H         ;如果已经完成了完整扫描,则重新开始扫描
     ;;MOV R1,#00H
     ;MOV R2,#08H
@@ -216,7 +226,7 @@ RLCBIT:
        MOV @R0,A
        DEC R0
        DEC R1
-       DJNZ R2,#00H,RLCLOOP
+       DJNZ R2,RLCLOOP
        MOV R1,#00H
        RET
 
@@ -288,7 +298,7 @@ MINUS:
      MOV R1,#10H
      MOV R3,#08H        ;字节长度初始化
 
-	 MOV RS1,#1B
+     MOV RS1,#1B
      MOV RS0,#1B
      MOV R0,#27H
      MOV R1,#17H
