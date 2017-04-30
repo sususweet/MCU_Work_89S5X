@@ -157,6 +157,7 @@ SHOWON:
     LJMP SHOWWEI
 SHOWPOINT:
     JC SHOWON
+    SETB F1
     CLR C
     SUBB A,#0F0H
     MOV DPTR,#TD
@@ -252,7 +253,7 @@ CALC:
     LJMP PLUS
     LJMP MINUS
     LJMP MULTI
-	LJMP DIVIDE
+    LJMP DIVIDE
     SJMP $
 
 ;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相加,结果存入10H
@@ -390,7 +391,7 @@ MULTILOOP:
       LCALL ISZERO
       MOV A,R4
       JZ MULTILOOP
-      
+
       MOV RS1,#0B
       MOV RS0,#1B
       MOV R0,#20H
