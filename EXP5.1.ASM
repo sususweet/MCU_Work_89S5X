@@ -145,7 +145,15 @@ MOV R1,#37H
 MOV R3,#00H
 MOV R2,#09H     ;数码管需要显示的位数+1
 CLR F1
+MOV A,37H
+CJNE A,#0FH,JUDERR
+LJMP NOERR
+JUDERR:
+    JZ NOERR
+    LCALL SHOWERR
+	RET
 LEDLOOP:
+NOERR:
     MOV DPTR,#TND       ;获取将要点亮的数码管段
     MOV A,@R1
     JZ JUGZERO
@@ -501,7 +509,21 @@ ISZERO:
            JZ ZEROLOOP
            MOV R4,#00H
            RET
-
+SHOWERR:
+        MOV R1,#70H
+        MOV R2,#08H
+  ERRLOOP:
+        MOV @R1,#0FH
+        INC R1
+        DJNZ R2,ERRLOOP
+        MOV RS1,#0B
+        MOV RS0,#1B
+        MOV R0,#70H
+        MOV R1,#30H
+        LCALL MEMMOVE
+        MOV RS1,#0B
+        MOV RS0,#0B
+        RET
 ;AT89C51数码管0-9,A-F编码表,不含小数点,P3口输出
 TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H,0FFH,0F7H
 ;AT89C51数码管位选编码表
