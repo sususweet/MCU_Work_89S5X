@@ -1,10 +1,10 @@
 ORG 0000H
 ;LJMP START
-NUM1 EQU 10H
-NUM2 EQU 20H
+NUM1 EQU 30H
+NUM2 EQU 40H
 NUMPOI EQU 2
 mov IE,#00000000b
-MOV SP,#30H
+MOV SP,#0E0H
 MOV R0,#NUM1
 LCALL CLEAR
 MOV R0,#NUM2
@@ -93,8 +93,8 @@ ISNUM:
 
     MOV RS1,#0B
     MOV RS0,#1B
-    MOV R0,#18H
-    MOV R1,#17H
+    MOV R0,#38H
+    MOV R1,#37H
     MOV R2,#08H
     LCALL RLCBIT
     MOV RS1,#0B
@@ -114,8 +114,8 @@ ISOPER:
 
     MOV RS1,#0B
     MOV RS0,#1B
-    MOV R0,#10H
-    MOV R1,#20H
+    MOV R0,#30H
+    MOV R1,#40H
     LCALL MEMMOVE
     MOV RS1,#0B
     MOV RS0,#0B
@@ -141,15 +141,7 @@ CLEAR:
         RET
 
 DISP_LED:
-;;MOV 20H,#01H    ;给20H到27H的存储空间赋初值
-;MOV 21H,#02H
-;MOV 22H,#03H
-;MOV 23H,#04H
-;MOV 24H,#05H
-;MOV 25H,#06H
-;MOV 26H,#07H
-;MOV 27H,#08H
-MOV R1,#17H
+MOV R1,#37H
 MOV R3,#00H
 MOV R2,#09H     ;数码管需要显示的位数+1
 CLR F1
@@ -264,25 +256,25 @@ CALC:
     LJMP DIVIDE
     SJMP $
 
-;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相加,结果存入10H
+;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相加,结果存入30H
 PLUS:
       MOV RS1,#1B
       MOV RS0,#0B
-      MOV R0,#20H       ;十进制数存放地址初始化
-      MOV R1,#10H
+      MOV R0,#40H       ;十进制数存放地址初始化
+      MOV R1,#30H
       MOV R3,#08H        ;字节长度初始化
       LCALL PLUSFUN
       MOV RS1,#0B
       MOV RS0,#1B
-      MOV R0,#20H
-      MOV R1,#10H
+      MOV R0,#40H
+      MOV R1,#30H
       LCALL MEMMOVE
       LJMP BEGIN
 
-;加法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3, R0存被加数,R1存加数, 结果存R0开始的单元
+;加法计算子程序，注意，使用前需要初始化30H位寄存器R0,R1,R3, R0存被加数,R1存加数, 结果存R0开始的单元
 PLUSFUN:
       CLR C
-PLUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
+PLUSLOOP:                 ;从50H开始循环遍历十进制数的各个数位
      MOV A,@R0
      ADDC A,@R1
      DA A               ;十进制数数位相加，进行二-十进制调整
@@ -301,18 +293,18 @@ PLUSFIN:
      DJNZ R3,PLUSLOOP
      RET
 
-;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相减,结果存入10H
+;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相减,结果存入30H
 MINUS:
      MOV RS1,#1B
      MOV RS0,#0B
-     MOV R0,#20H       ;十进制数存放地址初始化
-     MOV R1,#10H
+     MOV R0,#40H       ;十进制数存放地址初始化
+     MOV R1,#30H
      MOV R3,#08H        ;字节长度初始化
 
      MOV RS1,#1B
      MOV RS0,#1B
-     MOV R0,#27H
-     MOV R1,#17H
+     MOV R0,#47H
+     MOV R1,#37H
      MOV R2,#08H
      LCALL GETMAX
 
@@ -323,18 +315,18 @@ MINUS:
 MEM1:
      MOV RS1,#0B
      MOV RS0,#1B
-     MOV R0,#20H
-     MOV R1,#10H
+     MOV R0,#40H
+     MOV R1,#30H
      LCALL MEMMOVE
      LJMP BEGIN
 MEM2:
-     MOV 17H,#17
+     MOV 37H,#17
      LJMP BEGIN             ;程序结束
 
-;减法计算子程序，注意，使用前需要初始化10H位寄存器R0,R1,R3, R0存被减数, R1存减数, R3存数码个数
+;减法计算子程序，注意，使用前需要初始化30H位寄存器R0,R1,R3, R0存被减数, R1存减数, R3存数码个数
 MINUSFUN:
      CLR C
-MINUSLOOP:                 ;从40H开始循环遍历十进制数的各个数位
+MINUSLOOP:                 ;从50H开始循环遍历十进制数的各个数位
      MOV A,@R0
 MINUSCON:
      SUBB A,@R1
@@ -351,78 +343,78 @@ MINUSFIN:
      DJNZ R3,MINUSLOOP
      RET
 
-;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相乘,结果存入10H
+;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相乘,结果存入30H
 MULTI:
       MOV RS1,#1B
       MOV RS0,#0B
-      MOV R0,#20H
-      MOV R1,#10H
+      MOV R0,#40H
+      MOV R1,#30H
       MOV R3,#08H
 
       MOV RS1,#0B
       MOV RS0,#1B
-      MOV R0,#10H
-      MOV R1,#40H
+      MOV R0,#30H
+      MOV R1,#50H
       LCALL MEMMOVE
-      MOV R0,#20H
-      MOV R1,#10H
+      MOV R0,#40H
+      MOV R1,#30H
       LCALL MEMMOVE
-      MOV R0,#50H
+      MOV R0,#60H
       LCALL CLEAR
-      MOV 50H,#1
+      MOV 60H,#1
 
       MOV RS1,#1B
       MOV RS0,#0B
 
-      MOV R0,#40H
-      MOV R1,#50H
+      MOV R0,#50H
+      MOV R1,#60H
       MOV R3,#08H        ;字节长度初始化
       LCALL MINUSFUN
 MULTILOOP:
       MOV RS1,#1B
       MOV RS0,#0B
 
-      MOV R0,#40H
-      MOV R1,#50H
+      MOV R0,#50H
+      MOV R1,#60H
       MOV R3,#08H        ;字节长度初始化
       LCALL MINUSFUN
 
-      MOV R0,#20H
-      MOV R1,#10H
+      MOV R0,#40H
+      MOV R1,#30H
       MOV R3,#08H
       LCALL PLUSFUN
 
 
       MOV RS1,#0B
       MOV RS0,#1B
-      MOV R0,#40H
+      MOV R0,#50H
       LCALL ISZERO
       MOV A,R4
       JZ MULTILOOP
 
       MOV RS1,#0B
       MOV RS0,#1B
-      MOV R0,#20H
-      MOV R1,#10H
+      MOV R0,#40H
+      MOV R1,#30H
       LCALL MEMMOVE
       LJMP BEGIN
 
-;使用10H位寄存器R0,R1,R3,将20H,10H开始的数码相除,结果存入10H
+;使用40H位寄存器R0,R1,R3,将40H,40H开始的数码相除,结果存入40H
 DIVIDE:
       MOV RS1,#0B    ;商和余数寄存器初始化
       MOV RS0,#1B
-      MOV R0,#40H
-      LCALL CLEAR
       MOV R0,#50H
       LCALL CLEAR
-      MOV 50H,#1
+      MOV R0,#60H
+      LCALL CLEAR
+      MOV 60H,#1
 
       MOV RS1,#0B
       MOV RS0,#1B
       MOV R7,#NUMPOI
 RBITLOOP:
-      MOV R0,#28H
-      MOV R1,#27H
+      MOV R0,#48H
+      MOV R1,#47H
       MOV R2,#08H    ;移动次数
       LCALL RLCBIT
       DJNZ R7,RBITLOOP
@@ -433,27 +425,27 @@ DIVIDELOOP:
       MOV RS1,#1B
       MOV RS0,#0B
 
-      MOV R0,#20H
-      MOV R1,#10H
+      MOV R0,#40H
+      MOV R1,#30H
       MOV R3,#08H        ;字节长度初始化
       LCALL MINUSFUN
 
-      MOV R0,#40H
-      MOV R1,#50H
+      MOV R0,#50H
+      MOV R1,#60H
       MOV R3,#08H
       LCALL PLUSFUN
 
       MOV RS1,#1B
       MOV RS0,#1B
-      MOV R0,#27H
-      MOV R1,#17H
+      MOV R0,#47H
+      MOV R1,#37H
       MOV R2,#08H
       LCALL GETMAX
       MOV A,R4
 
       JZ DIVIDELOOP
 
-      MOV A,#40H
+      MOV A,#50H
       ADD A,#NUMPOI
       MOV R0,A
       MOV A,@R0
@@ -462,8 +454,8 @@ DIVIDELOOP:
 
       MOV RS1,#0B
       MOV RS0,#1B
-      MOV R0,#40H
-      MOV R1,#10H
+      MOV R0,#50H
+      MOV R1,#30H
       LCALL MEMMOVE
 
       LJMP BEGIN
@@ -491,8 +483,8 @@ GETMAX:
    GET2:
      MOV RS1,#1B
      MOV RS0,#0B
-     MOV R0,#20H
-     MOV R1,#10H
+     MOV R0,#40H
+     MOV R1,#30H
      MOV R4,#00H
      RET
 ISZERO:
