@@ -42,22 +42,22 @@ JUDGELIE:
     JNB P1.3, HANG1
     LJMP KEY_SCAN
 HANG1:
-    LCALL DEL10MS
+    LCALL DEL20MS
     JNB P1.3, HANG1
     MOV R5,#01H
     LJMP KEY_END
 HANG2:
-    LCALL DEL10MS
+    LCALL DEL20MS
     JNB P1.2, HANG2
     MOV R5,#02H
     LJMP KEY_END
 HANG3:
-    LCALL DEL10MS
+    LCALL DEL20MS
     JNB P1.1, HANG3
     MOV R5,#03H
     LJMP KEY_END
 HANG4:
-    LCALL DEL10MS
+    LCALL DEL20MS
     JNB P1.0, HANG4
     MOV R5,#04H
     LJMP KEY_END
@@ -77,10 +77,18 @@ KEY_END:
     MOVC A,@A+DPTR
 
     CJNE A,#0EH,KEY_OPER
+    ;MOV RS1,#0B
+    ;MOV RS0,#0B
+    ;MOV R0,#NUM1
+    MOV RS1,#0B
+    MOV RS0,#1B
+    MOV R0,#31H
+    MOV R1,#30H
+    MOV R2,#08H
+    LCALL RRCBIT
     MOV RS1,#0B
     MOV RS0,#0B
-    MOV R0,#NUM1
-    LCALL CLEAR
+    ;LCALL CLEAR
     LJMP KEYEND
 KEY_OPER:
     CJNE A,#0FH,KEY_NEXT
@@ -145,13 +153,15 @@ MOV R1,#37H
 MOV R3,#00H
 MOV R2,#09H     ;数码管需要显示的位数+1
 CLR F1
+CLR C
 MOV A,37H
 CJNE A,#0FH,JUDERR
 LJMP NOERR
 JUDERR:
     JZ NOERR
+	JNC NOERR
     LCALL SHOWERR
-	RET
+    RET
 LEDLOOP:
 NOERR:
     MOV DPTR,#TND       ;获取将要点亮的数码管段
@@ -178,7 +188,17 @@ NOTSHOWZ:
     SETB F1
     LJMP SHOWWEI
 JUGZERO:
+   ; MOV RS1,#0B
+   ; MOV RS0,#1B
+   ; MOV R0,#30H
+   ; LCALL ISZERO
+   ; MOV A,R4
+    ;MOV RS1,#0B
+   ; MOV RS0,#0B
+    ;JNZ ONEZERO
+
     JB F1,SHOWZERO
+
     ;DEC R1
     ;MOV A,@R1
     ;INC R1
@@ -221,13 +241,11 @@ DELAY:
        djnz r6,d2
        djnz r5,d1
        ret
-DEL10MS:
-       mov r5,#20
-       d3:mov r6,#20
-       d4:mov r7,#10
+DEL20MS:
+       mov r6,#100
+       d4:mov r7,#100      
        djnz r7,$
        djnz r6,d4
-       djnz r5,d3
        ret
 RLCBIT:
   RLCLOOP:
@@ -238,6 +256,16 @@ RLCBIT:
        DJNZ R2,RLCLOOP
        MOV @R0,#00H
        RET
+RRCBIT:
+  RRCLOOP:
+       MOV A,@R0
+       MOV @R1,A
+       INC R0
+       INC R1
+       DJNZ R2,RRCLOOP
+       MOV @R0,#00H
+       RET
+
 
 ;MEMMOVE 将R0开头的数据移动到R1开始的存储单元，数据共8位
 MEMMOVE:
@@ -407,8 +435,20 @@ MULTILOOP:
       LCALL MEMMOVE
       LJMP BEGIN
 
-;使用40H位寄存器R0,R1,R3,将40H,40H开始的数码相除,结果存入40H
+;使用40H位寄存器R0,R1,R3,将40H,30H开始的数码相除,结果存入30H
 DIVIDE:
+      MOV RS1,#0B
+      MOV RS0,#1B
+      MOV R0,#30H
+      LCALL ISZERO
+      MOV A,R4
+
+      JNZ DIVERR
+      JZ DIVNOERR
+DIVERR:
+       LCALL SHOWERR
+       LJMP BEGIN
+DIVNOERR:
       MOV RS1,#0B    ;商和余数寄存器初始化
       MOV RS0,#1B
       MOV R0,#50H
@@ -482,10 +522,8 @@ GETMAX:
    GETFINAL:	;如果是负数，则交换相减顺序
      MOV RS1,#1B
      MOV RS0,#0B
-     MOV A,R0
-     MOV B,R1
-     MOV R0,B
-     MOV R1,A
+     MOV R0,#30H
+     MOV R1,#40H
      MOV R4,#01H
      RET
    GET2:
