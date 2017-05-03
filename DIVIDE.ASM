@@ -1,5 +1,5 @@
 ORG 0000H
-NUMPOI EQU 2
+NUMPOI EQU 0
 ;使用40H位寄存器R0,R1,R3,将40H,30H开始的数码相除,结果存入30H
 DIVIDE:
       MOV RS1,#0B
@@ -24,18 +24,16 @@ DIVNOERR:
       LCALL CLEAR
       MOV 70H,#1
 
-      MOV RS1,#0B
-      MOV RS0,#1B
-      MOV R7,#NUMPOI
+      ;MOV RS1,#0B
+     ; MOV RS0,#1B
+     ; MOV R7,#NUMPOI
 RBITLOOP:
-      MOV R0,#48H
-      MOV R1,#47H
-      MOV R2,#08H    ;移动次数
-      LCALL RLCBIT
-      DJNZ R7,RBITLOOP
+      ;MOV R0,#48H
+      ;MOV R1,#47H
+     ; MOV R2,#08H    ;移动次数
+      ;LCALL RLCBIT
+     ; DJNZ R7,RBITLOOP
 
-      MOV RS1,#0B
-      MOV RS0,#0B
 ;除法主程序
 MOV RS1,#1B
 MOV RS0,#0B
@@ -69,25 +67,27 @@ DIVLESS:
 	  ;POP A
       MOV A,R4
       JZ DIVCALCLOOP
-      PUSH A
+      CJNE R5,#08H,DIVON
+      LJMP DIVEND
+DIVON:
       MOV RS1,#0B
       MOV RS0,#1B
       MOV R0,#50H
       MOV R1,#4FH
       MOV R2,#16
-      LCALL RLCDIV
+      LCALL RLCBIT
 	  MOV R0,#68H
       MOV R1,#67H
       MOV R2,#8
       LCALL RLCBIT
-      POP A
-	  MOV RS1,#1B
+
+      MOV RS1,#1B
       MOV RS0,#0B
       INC R5
 	  ;交换过顺序，A变为1
-      CJNE R5,#08H,DIVLESS
-      DIVEND
-      JNZ DIVIDELOOP
+      CJNE R5,#09H,DIVLESS
+      LJMP DIVEND
+      ;JNZ DIVIDELOOP
 DIVCALCLOOP:
 	  MOV RS1,#1B
       MOV RS0,#0B
@@ -106,7 +106,7 @@ DIVCALCLOOP:
       MOV R3,#08H
       LCALL PLUSFUN
 
-      ;LJMP DIVLESS
+      LJMP DIVLESS
 
 	  ;MOV A,R0
 	 ; ADD A,R5
@@ -115,14 +115,14 @@ DIVCALCLOOP:
 	;  ADD A,R5
 	;  MOV R1,A
 
-	  CJNE R5,#08H,DIVLESS
+	 ; CJNE R5,#08H,DIVLESS
 DIVEND:
-      MOV A,#60H
-      ADD A,#NUMPOI
-      MOV R0,A
-      MOV A,@R0
-      ADD A,#0F0H
-      MOV @R0,A
+     ; MOV A,#60H
+     ; ADD A,#NUMPOI
+     ; MOV R0,A
+     ; MOV A,@R0
+    ;  ADD A,#0F0H
+    ;  MOV @R0,A
 
       MOV RS1,#0B
       MOV RS0,#1B
