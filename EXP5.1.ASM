@@ -3,16 +3,18 @@ ORG 0000H
 NUM1 EQU 30H
 NUM2 EQU 40H
 NUMPOI EQU 2
-mov IE,#00000000b
+MOV IE,#00000000B
 MOV SP,#0E0H
+MOV R0,#28H
+LCALL CLEAR
 MOV R0,#NUM1
 LCALL CLEAR
 MOV R0,#NUM2
 LCALL CLEAR
 BEGIN:
 SETB F0
-MOV RS1,#0B
-MOV RS0,#0B
+CLR RS1
+CLR RS0
 KEY_SCAN: ;键盘扫描使用P1口,P1.4-P1.7为列扫描,P1.0-P1.3为行扫描
     MOV P1,#0F0H
     JNB P1.4, LIE4
@@ -63,8 +65,8 @@ HANG4:
     LJMP KEY_END
 KEY_END:
     JNB F0,KEYOLD
-    MOV R0,#NUM1
-    LCALL CLEAR
+    ;MOV R0,#NUM1
+    ;LCALL CLEAR
     CLR F0
   KEYOLD:
     MOV A,R5
@@ -77,17 +79,17 @@ KEY_END:
     MOVC A,@A+DPTR
 
     CJNE A,#0EH,KEY_OPER
-    ;MOV RS1,#0B
-    ;MOV RS0,#0B
+    ;CLR RS1
+    ;CLR RS0
     ;MOV R0,#NUM1
-    MOV RS1,#0B
-    MOV RS0,#1B
+    CLR RS1
+    SETB RS0
     MOV R0,#31H
     MOV R1,#30H
     MOV R2,#08H
     LCALL RRCBIT
-    MOV RS1,#0B
-    MOV RS0,#0B
+    CLR RS1
+    CLR RS0
     ;LCALL CLEAR
     LJMP KEYEND
 KEY_OPER:
@@ -99,17 +101,17 @@ KEY_NEXT:
 ISNUM:
     PUSH A
 
-    MOV RS1,#0B
-    MOV RS0,#1B
+    CLR RS1
+    SETB RS0
     MOV R0,#38H
     MOV R1,#37H
     MOV R2,#08H
     LCALL RLCBIT
-    MOV RS1,#0B
-    MOV RS0,#0B
+    CLR RS1
+    CLR RS0
 
     POP A
-    MOV @R0,A   ;MOV 20H,A
+    MOV NUM1,A   ;MOV 20H,A
     INC R0
     CJNE R0,#19H,KEYEND
     MOV R0,#NUM1
@@ -120,13 +122,13 @@ ISOPER:
     SUBB A,#10
     PUSH A
 
-    MOV RS1,#0B
-    MOV RS0,#1B
+    CLR RS1
+    SETB RS0
     MOV R0,#30H
     MOV R1,#40H
     LCALL MEMMOVE
-    MOV RS1,#0B
-    MOV RS0,#0B
+    CLR RS1
+    CLR RS0
     MOV R0,#NUM1
     LCALL CLEAR
 
@@ -159,8 +161,11 @@ CJNE A,#0FH,JUDERR
 LJMP NOERR
 JUDERR:
     JZ NOERR
-	JNC NOERR
+    JNC NOERR
     LCALL SHOWERR
+    SETB F0
+    CLR RS1
+    CLR RS0
     RET
 LEDLOOP:
 NOERR:
@@ -188,13 +193,13 @@ NOTSHOWZ:
     SETB F1
     LJMP SHOWWEI
 JUGZERO:
-   ; MOV RS1,#0B
-   ; MOV RS0,#1B
+   ; CLR RS1
+   ; SETB RS0
    ; MOV R0,#30H
    ; LCALL ISZERO
    ; MOV A,R4
-    ;MOV RS1,#0B
-   ; MOV RS0,#0B
+    ;CLR RS1
+   ; CLR RS0
     ;JNZ ONEZERO
 
     JB F1,SHOWZERO
@@ -243,7 +248,7 @@ DELAY:
        ret
 DEL20MS:
        mov r6,#100
-       d4:mov r7,#100      
+       d4:mov r7,#100
        djnz r7,$
        djnz r6,d4
        ret
@@ -266,25 +271,19 @@ RRCBIT:
        MOV @R0,#00H
        RET
 
-
-;MEMMOVE 将R0开头的数据移动到R1开始的存储单元，数据共8位
-MEMMOVE:
-        MOV R2,#09H
-  MEMLOOP:
-          MOV A,@R0
-          MOV @R1,A
-          INC R0
-          INC R1
-          DJNZ R2,MEMLOOP
-          RET
-
 CAL:
     POP A
+    CJNE A,#04H,CALJUDG
+CALJUDG:
     MOV R7,A
+    JNC CALCERR
     RL A
     ADD A,R7
     MOV DPTR,#CALC
     JMP @A+DPTR
+CALCERR:
+    PUSH A
+    LJMP BEGIN
 CALC:
     LJMP PLUS
     LJMP MINUS
@@ -294,14 +293,14 @@ CALC:
 
 ;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相加,结果存入30H
 PLUS:
-      MOV RS1,#1B
-      MOV RS0,#0B
+      SETB RS1
+      CLR RS0
       MOV R0,#40H       ;十进制数存放地址初始化
       MOV R1,#30H
       MOV R3,#08H        ;字节长度初始化
       LCALL PLUSFUN
-      MOV RS1,#0B
-      MOV RS0,#1B
+      CLR RS1
+      SETB RS0
       MOV R0,#40H
       MOV R1,#30H
       LCALL MEMMOVE
@@ -331,26 +330,43 @@ PLUSFIN:
 
 ;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相减,结果存入30H
 MINUS:
-     MOV RS1,#1B
-     MOV RS0,#0B
+     SETB RS1
+     CLR RS0
      MOV R0,#40H       ;十进制数存放地址初始化
      MOV R1,#30H
      MOV R3,#08H        ;字节长度初始化
 
-     MOV RS1,#1B
-     MOV RS0,#1B
+     SETB RS1
+     SETB RS0
      MOV R0,#47H
      MOV R1,#37H
      MOV R2,#08H
      LCALL GETMAX
-
+     MOV A,R4
+     JNZ DOSWAP
+     JZ NOSWAP
+DOSWAP:
+     SETB RS1
+     CLR RS0
+     MOV R0,#30H
+     MOV R1,#40H
+     LJMP MINUSCAL
+NOSWAP:
+     SETB RS1
+     CLR RS0
+     MOV R0,#40H
+     MOV R1,#30H
+     LJMP MINUSCAL
+MINUSCAL:
      LCALL MINUSFUN
+     SETB RS1
+     SETB RS0
      MOV A,R4
      JZ MEM1
      JNZ MEM2
 MEM1:
-     MOV RS1,#0B
-     MOV RS0,#1B
+     CLR RS1
+     SETB RS0
      MOV R0,#40H
      MOV R1,#30H
      LCALL MEMMOVE
@@ -381,14 +397,36 @@ MINUSFIN:
 
 ;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相乘,结果存入30H
 MULTI:
-      MOV RS1,#1B
-      MOV RS0,#0B
+      SETB RS1
+      CLR RS0
       MOV R0,#40H
       MOV R1,#30H
       MOV R3,#08H
 
-      MOV RS1,#0B
-      MOV RS0,#1B
+      SETB RS1
+      SETB RS0
+      MOV R0,#47H
+      MOV R1,#37H
+      MOV R2,#08H
+      LCALL GETMAX
+      MOV A,R4
+      JNZ MULSWAP
+      JZ MULGOON
+MULSWAP:
+      CLR RS1
+      SETB RS0
+      MOV R0,#30H
+      MOV R1,#50H
+      LCALL MEMMOVE
+      MOV R0,#40H
+      MOV R1,#30H
+      LCALL MEMMOVE
+      MOV R0,#50H
+      MOV R1,#40H
+      LCALL MEMMOVE
+MULGOON:
+      CLR RS1
+      SETB RS0
       MOV R0,#30H
       MOV R1,#50H
       LCALL MEMMOVE
@@ -398,38 +436,40 @@ MULTI:
       MOV R0,#60H
       LCALL CLEAR
       MOV 60H,#1
+      MOV R0,#40H
+      LCALL CLEAR
 
-      MOV RS1,#1B
-      MOV RS0,#0B
+      ;SETB RS1
+      ;CLR RS0
 
-      MOV R0,#50H
-      MOV R1,#60H
-      MOV R3,#08H        ;字节长度初始化
-      LCALL MINUSFUN
+      ;MOV R0,#50H
+      ;MOV R1,#60H
+      ;MOV R3,#08H        ;字节长度初始化
+      ;LCALL MINUSFUN
 MULTILOOP:
-      MOV RS1,#1B
-      MOV RS0,#0B
-
+      CLR RS1
+      SETB RS0
       MOV R0,#50H
-      MOV R1,#60H
-      MOV R3,#08H        ;字节长度初始化
-      LCALL MINUSFUN
+      LCALL ISZERO
+      MOV A,R4
+      JNZ MINFIN
 
+      SETB RS1
+      CLR RS0
       MOV R0,#40H
       MOV R1,#30H
       MOV R3,#08H
       LCALL PLUSFUN
 
-
-      MOV RS1,#0B
-      MOV RS0,#1B
       MOV R0,#50H
-      LCALL ISZERO
-      MOV A,R4
-      JZ MULTILOOP
+      MOV R1,#60H
+      MOV R3,#08H        ;字节长度初始化
+      LCALL MINUSFUN
 
-      MOV RS1,#0B
-      MOV RS0,#1B
+      LJMP MULTILOOP
+MINFIN:
+      CLR RS1
+      SETB RS0
       MOV R0,#40H
       MOV R1,#30H
       LCALL MEMMOVE
@@ -437,8 +477,8 @@ MULTILOOP:
 
 ;使用40H位寄存器R0,R1,R3,将40H,30H开始的数码相除,结果存入30H
 DIVIDE:
-      MOV RS1,#0B
-      MOV RS0,#1B
+      CLR RS1
+      SETB RS0
       MOV R0,#30H
       LCALL ISZERO
       MOV A,R4
@@ -449,16 +489,18 @@ DIVERR:
        LCALL SHOWERR
        LJMP BEGIN
 DIVNOERR:
-      MOV RS1,#0B    ;商和余数寄存器初始化
-      MOV RS0,#1B
-      MOV R0,#50H
+      CLR RS1    ;商和余数寄存器初始化
+      SETB RS0
+      MOV R0,#48H
       LCALL CLEAR
       MOV R0,#60H
       LCALL CLEAR
-      MOV 60H,#1
+      MOV R0,#70H
+      LCALL CLEAR
+      MOV 70H,#1
 
-      MOV RS1,#0B
-      MOV RS0,#1B
+      CLR RS1
+      SETB RS0
       MOV R7,#NUMPOI
 RBITLOOP:
       MOV R0,#48H
@@ -467,42 +509,96 @@ RBITLOOP:
       LCALL RLCBIT
       DJNZ R7,RBITLOOP
 
-      MOV RS1,#0B
-      MOV RS0,#0B
+;除法主程序
+SETB RS1
+CLR RS0
+MOV R5,#00H
 DIVIDELOOP:
-      MOV RS1,#1B
-      MOV RS0,#0B
 
-      MOV R0,#40H
+      ;MOV R0,#40H
+      ;MOV R1,#30H
+      ;MOV R3,#08H        ;字节长度初始化
+      ;LCALL MINUSFUN
+
+      ;MOV R0,#50H
+      ;MOV R1,#70H
+     ; MOV R3,#08H
+     ; LCALL PLUSFUN
+	  ;MOV A,R5
+	  ;PUSH A
+
+
+	  ;MOV R0,#48H
+     ; MOV R1,#47H
+    ;  MOV R2,#08H    ;移动次数
+    ;  LCALL RLCBIT
+DIVLESS:
+      SETB RS1
+      SETB RS0
+      MOV R0,#4FH
+      MOV R1,#37H
+      MOV R2,#08H
+      LCALL GETMAX
+	  ;POP A
+      MOV A,R4
+      JZ DIVCALCLOOP
+      SETB RS1
+      CLR RS0
+      CJNE R5,#08H,DIVON
+      LJMP DIVEND
+DIVON:
+      CLR RS1
+      SETB RS0
+      MOV R0,#50H
+      MOV R1,#4FH
+      MOV R2,#16
+      LCALL RLCBIT
+      MOV R0,#68H
+      MOV R1,#67H
+      MOV R2,#8
+      LCALL RLCBIT
+
+      SETB RS1
+      CLR RS0
+      INC R5
+      ;交换过顺序，A变为1
+      CJNE R5,#09H,DIVLESS
+      LJMP DIVEND
+      ;JNZ DIVIDELOOP
+DIVCALCLOOP:
+      SETB RS1
+      CLR RS0
+      MOV R0,#48H
       MOV R1,#30H
       MOV R3,#08H        ;字节长度初始化
       LCALL MINUSFUN
 
-      MOV R0,#50H
-      MOV R1,#60H
+      MOV R0,#60H
+      MOV R1,#70H
       MOV R3,#08H
       LCALL PLUSFUN
 
-      MOV RS1,#1B
-      MOV RS0,#1B
-      MOV R0,#47H
-      MOV R1,#37H
-      MOV R2,#08H
-      LCALL GETMAX
-      MOV A,R4
+      LJMP DIVLESS
 
-      JZ DIVIDELOOP
+	  ;MOV A,R0
+	 ; ADD A,R5
+	;  MOV R0,A
+	;  MOV A,R1
+	;  ADD A,R5
+	;  MOV R1,A
 
-      MOV A,#50H
+	 ; CJNE R5,#08H,DIVLESS
+DIVEND:
+      MOV A,#60H
       ADD A,#NUMPOI
       MOV R0,A
       MOV A,@R0
       ADD A,#0F0H
       MOV @R0,A
 
-      MOV RS1,#0B
-      MOV RS0,#1B
-      MOV R0,#50H
+      CLR RS1
+      SETB RS0
+      MOV R0,#60H
       MOV R1,#30H
       LCALL MEMMOVE
 
@@ -520,17 +616,9 @@ GETMAX:
      DJNZ R2,GETLOOP
      LJMP GET2
    GETFINAL:	;如果是负数，则交换相减顺序
-     MOV RS1,#1B
-     MOV RS0,#0B
-     MOV R0,#30H
-     MOV R1,#40H
      MOV R4,#01H
      RET
    GET2:
-     MOV RS1,#1B
-     MOV RS0,#0B
-     MOV R0,#40H
-     MOV R1,#30H
      MOV R4,#00H
      RET
 ISZERO:
@@ -554,14 +642,26 @@ SHOWERR:
         MOV @R1,#0FH
         INC R1
         DJNZ R2,ERRLOOP
-        MOV RS1,#0B
-        MOV RS0,#1B
+        CLR RS1
+        SETB RS0
         MOV R0,#70H
         MOV R1,#30H
         LCALL MEMMOVE
-        MOV RS1,#0B
-        MOV RS0,#0B
+        CLR RS1
+        CLR RS0
         RET
+
+;MEMMOVE 将R0开头的数据移动到R1开始的存储单元，数据共8位
+MEMMOVE:
+        MOV R2,#09H
+  MEMLOOP:
+          MOV A,@R0
+          MOV @R1,A
+          INC R0
+          INC R1
+          DJNZ R2,MEMLOOP
+          RET
+
 ;AT89C51数码管0-9,A-F编码表,不含小数点,P3口输出
 TND: DB 28H,7EH,0A2H,62H,74H,61H,21H,7AH,20H,60H,30H,25H,0A9H,26H,0A1H,0B1H,0FFH,0F7H
 ;AT89C51数码管位选编码表

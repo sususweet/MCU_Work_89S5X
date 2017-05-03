@@ -25,14 +25,14 @@ DIVNOERR:
       MOV 70H,#1
 
       ;MOV RS1,#0B
-     ; MOV RS0,#1B
-     ; MOV R7,#NUMPOI
+      ;MOV RS0,#1B
+      ;MOV R7,#NUMPOI
 RBITLOOP:
       ;MOV R0,#48H
       ;MOV R1,#47H
-     ; MOV R2,#08H    ;移动次数
+      ;MOV R2,#08H    ;移动次数
       ;LCALL RLCBIT
-     ; DJNZ R7,RBITLOOP
+      ;DJNZ R7,RBITLOOP
 
 ;除法主程序
 MOV RS1,#1B
@@ -67,6 +67,8 @@ DIVLESS:
 	  ;POP A
       MOV A,R4
       JZ DIVCALCLOOP
+      MOV RS1,#1B
+      MOV RS0,#0B
       CJNE R5,#08H,DIVON
       LJMP DIVEND
 DIVON:
@@ -249,14 +251,6 @@ MEMMOVE:
           INC R1
           DJNZ R2,MEMLOOP
           RET
-RLCDIV:
-  DIVLOOP:
-       MOV A,@R1
-       MOV @R0,A
-       DEC R0
-       DEC R1
-       DJNZ R2,DIVLOOP
-       RET
 RLCBIT:
   RLCLOOP:
        MOV A,@R1
