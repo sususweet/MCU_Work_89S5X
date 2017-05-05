@@ -50,22 +50,34 @@ JUDGELIE:
     LJMP KEY_SCAN
 HANG1:
     LCALL DEL20MS
-    JNB P1.3, HANG1
+    JB P1.3, KEY_SCAN
+HANG1REL:
+    LCALL DEL20MS
+    JNB P1.3, HANG1REL
     MOV R5,#01H
     LJMP KEY_END
 HANG2:
     LCALL DEL20MS
-    JNB P1.2, HANG2
+    JB P1.2, KEY_SCAN
+HANG2REL:
+    LCALL DEL20MS
+    JNB P1.2, HANG2REL
     MOV R5,#02H
     LJMP KEY_END
 HANG3:
     LCALL DEL20MS
-    JNB P1.1, HANG3
+    JB P1.1, KEY_SCAN
+HANG3REL:
+    LCALL DEL20MS
+    JNB P1.1, HANG3REL
     MOV R5,#03H
     LJMP KEY_END
 HANG4:
     LCALL DEL20MS
-    JNB P1.0, HANG4
+    JB P1.0, KEY_SCAN
+HANG4REL:
+    LCALL DEL20MS
+    JNB P1.0, HANG4REL
     MOV R5,#04H
     LJMP KEY_END
 KEY_END:
@@ -182,14 +194,14 @@ CLEAR:
         RET
 
 DISP_LED:
-MOV R1,#37H
+MOV R1,#37H     ;数码管显示内存初始地址
 MOV R3,#00H
 MOV R2,#09H     ;数码管需要显示的位数+1
 CLR F1
 CLR C
 MOV A,37H
 CJNE A,#0FH,JUDERR
-LJMP NOERR
+LJMP NOERR      ;数码管显示逸出错误处理，设置最大位数为7位
 JUDERR:
     JZ NOERR
     JNC NOERR
@@ -198,18 +210,18 @@ JUDERR:
     CLR RS1
     CLR RS0
     RET
-LEDLOOP:
+LEDLOOP:         ;数码管显示主程序
 NOERR:
     MOV DPTR,#TND       ;获取将要点亮的数码管段
     MOV A,@R1
-    JZ JUGZERO
-    CJNE A,#0EFH,SHOWPOINT
+    JZ JUGZERO              ;数码管灭零、单零显示程序
+    CJNE A,#0EFH,SHOWPOINT  ;数码管小数点显示判跳
 SHOWON:
-    CJNE A,#17,NOTSHOWZ
+    CJNE A,#17,NOTSHOWZ     ;数码管负号判断显示
     MOVC A,@A+DPTR
     MOV P3,A
     LJMP SHOWWEI
-SHOWPOINT:
+SHOWPOINT:                  ;数码管小数点显示主程序
     JC SHOWON
     SETB F1
     CLR C
@@ -218,7 +230,7 @@ SHOWPOINT:
     MOVC A,@A+DPTR
     MOV P3,A
     LJMP SHOWWEI
-NOTSHOWZ:
+NOTSHOWZ:                   ;数码管灭零、单零判断显示主程序
     MOVC A,@A+DPTR
     MOV P3,A
     SETB F1
@@ -256,7 +268,7 @@ SHOWWEI:
     DJNZ R2,GOON        ;判断是否完成对8位数码的完整扫描,如果未完成则继续GOON
     JNB F1,ONEZERO
     RET
-ONEZERO:
+ONEZERO:                ;数码管单零显示
     MOV DPTR,#TND
     MOV A,#00H
     MOVC A,@A+DPTR
