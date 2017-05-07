@@ -1,5 +1,4 @@
 ORG 0000H
-;LJMP START
 NUM1 EQU 30H
 NUM2 EQU 40H
 NUMPOI EQU 2
@@ -29,7 +28,6 @@ KEY_SCAN: ;键盘扫描使用P1口,P1.4-P1.7为列扫描,P1.0-P1.3为行扫描
     LCALL DISP_LED
     SJMP KEY_SCAN
 LIE1:
-    ;LCALL DEL10MS
     MOV R4,#01H
     LJMP JUDGELIE
 LIE2:
@@ -98,9 +96,6 @@ KEY_END:
     MOVC A,@A+DPTR
 
     CJNE A,#0EH,KEY_OPER
-    ;CLR RS1
-    ;CLR RS0
-    ;MOV R0,#NUM1
     MOV A,B
     JNZ ALLCLRHELP
     JZ SINCLRHELP
@@ -119,7 +114,7 @@ KEY_NEXT:
     CJNE A,#09H,ISOPER
 ISNUM:
     PUSH A
-
+    
     MOV A,B
     JNZ ALLCLRNUM
     LJMP NOCLRNUM
@@ -136,7 +131,7 @@ NOCLRNUM:
     CLR RS0
 
     POP A
-    MOV NUM1,A   ;MOV 20H,A
+    MOV NUM1,A
     INC R0
     CJNE R0,#19H,KEYEND
     MOV R0,#NUM1
@@ -156,7 +151,6 @@ ISOPER:
     CLR RS0
     MOV R0,#NUM1
     LCALL CLEAR
-
 
     LJMP KEYEND
 KEYEND:
@@ -181,7 +175,6 @@ SINCLR:
     RET
 KEY_TABLE:    ;0AH:+  0BH:-  0CH:x  0DH:/  0EH:*  0FH:#
     DB 01H,02H,03H,0AH,04H,05H,06H,0BH,07H,08H,09H,0CH,0EH,00H,0FH,0DH
-
 
 ;R0为清空的开始位，CLEAR子程序将从R0开始的8位数码清空
 CLEAR:
@@ -236,21 +229,7 @@ NOTSHOWZ:                   ;数码管灭零、单零判断显示主程序
     SETB F1
     LJMP SHOWWEI
 JUGZERO:
-   ; CLR RS1
-   ; SETB RS0
-   ; MOV R0,#30H
-   ; LCALL ISZERO
-   ; MOV A,R4
-    ;CLR RS1
-   ; CLR RS0
-    ;JNZ ONEZERO
-
     JB F1,SHOWZERO
-
-    ;DEC R1
-    ;MOV A,@R1
-    ;INC R1
-    ;JNZ SHOWZERO
     MOV P3,#0FFH
     LJMP SHOWWEI
 SHOWZERO:
@@ -274,10 +253,7 @@ ONEZERO:                ;数码管单零显示
     MOVC A,@A+DPTR
     MOV P3,A
     LCALL DELAY
-    RET
-    ;MOV R0,#20H         ;如果已经完成了完整扫描,则重新开始扫描
-    ;;MOV R1,#00H
-    ;MOV R2,#08H
+    RET                 ;如果已经完成了完整扫描,则重新开始扫描
 GOON:
     LCALL DELAY         ;调用DELAY函数配合视觉暂留,实现多位数码管同时显示
     AJMP LEDLOOP
@@ -334,7 +310,7 @@ CALC:
     LJMP DIVIDE
     SJMP $
 
-;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相加,结果存入30H
+;使用寄存器R0,R1,R3,将40H,30H开始的数码相加,结果存入30H
 PLUS:
       SETB RS1
       CLR RS0
@@ -349,7 +325,7 @@ PLUS:
       LCALL MEMMOVE
       LJMP BEGIN
 
-;加法计算子程序，注意，使用前需要初始化30H位寄存器R0,R1,R3, R0存被加数,R1存加数, 结果存R0开始的单元
+;加法计算子程序，注意，使用前需要初始化寄存器R0,R1,R3, R0存被加数,R1存加数, 结果存R0开始的单元
 PLUSFUN:
       CLR C
 PLUSLOOP:                 ;从50H开始循环遍历十进制数的各个数位
@@ -371,7 +347,7 @@ PLUSFIN:
      DJNZ R3,PLUSLOOP
      RET
 
-;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相减,结果存入30H
+;使用寄存器R0,R1,R3,将40H,30H开始的数码相减,结果存入30H
 MINUS:
      SETB RS1
      CLR RS0
@@ -418,7 +394,7 @@ MEM2:
      MOV 37H,#17
      LJMP BEGIN             ;程序结束
 
-;减法计算子程序，注意，使用前需要初始化30H位寄存器R0,R1,R3, R0存被减数, R1存减数, R3存数码个数
+;减法计算子程序，注意，使用前需要初始化寄存器R0,R1,R3, R0存被减数, R1存减数, R3存数码个数
 MINUSFUN:
      CLR C
 MINUSLOOP:                 ;从50H开始循环遍历十进制数的各个数位
@@ -438,7 +414,7 @@ MINUSFIN:
      DJNZ R3,MINUSLOOP
      RET
 
-;使用30H位寄存器R0,R1,R3,将40H,30H开始的数码相乘,结果存入30H
+;使用寄存器R0,R1,R3,将40H,30H开始的数码相乘,结果存入30H
 MULTI:
       SETB RS1
       CLR RS0
@@ -482,13 +458,6 @@ MULGOON:
       MOV R0,#40H
       LCALL CLEAR
 
-      ;SETB RS1
-      ;CLR RS0
-
-      ;MOV R0,#50H
-      ;MOV R1,#60H
-      ;MOV R3,#08H        ;字节长度初始化
-      ;LCALL MINUSFUN
 MULTILOOP:
       CLR RS1
       SETB RS0
@@ -518,7 +487,7 @@ MINFIN:
       LCALL MEMMOVE
       LJMP BEGIN
 
-;使用40H位寄存器R0,R1,R3,将40H,30H开始的数码相除,结果存入30H
+;使用寄存器R0,R1,R3,将40H,30H开始的数码相除,结果存入30H
 DIVIDE:
       CLR RS1
       SETB RS0
@@ -557,24 +526,6 @@ SETB RS1
 CLR RS0
 MOV R5,#00H
 DIVIDELOOP:
-
-      ;MOV R0,#40H
-      ;MOV R1,#30H
-      ;MOV R3,#08H        ;字节长度初始化
-      ;LCALL MINUSFUN
-
-      ;MOV R0,#50H
-      ;MOV R1,#70H
-     ; MOV R3,#08H
-     ; LCALL PLUSFUN
-	  ;MOV A,R5
-	  ;PUSH A
-
-
-	  ;MOV R0,#48H
-     ; MOV R1,#47H
-    ;  MOV R2,#08H    ;移动次数
-    ;  LCALL RLCBIT
 DIVLESS:
       SETB RS1
       SETB RS0
@@ -582,8 +533,7 @@ DIVLESS:
       MOV R1,#37H
       MOV R2,#08H
       LCALL GETMAX
-	  ;POP A
-      MOV A,R4
+      MOV A,R4               ;交换过顺序，A变为1
       JZ DIVCALCLOOP
       SETB RS1
       CLR RS0
@@ -604,7 +554,7 @@ DIVON:
       SETB RS1
       CLR RS0
       INC R5
-      ;交换过顺序，A变为1
+
       CJNE R5,#09H,DIVLESS
       LJMP DIVEND
       ;JNZ DIVIDELOOP
@@ -622,15 +572,6 @@ DIVCALCLOOP:
       LCALL PLUSFUN
 
       LJMP DIVLESS
-
-	  ;MOV A,R0
-	 ; ADD A,R5
-	;  MOV R0,A
-	;  MOV A,R1
-	;  ADD A,R5
-	;  MOV R1,A
-
-	 ; CJNE R5,#08H,DIVLESS
 DIVEND:
       MOV A,#60H
       ADD A,#NUMPOI
