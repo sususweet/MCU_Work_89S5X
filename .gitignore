@@ -1,4 +1,8 @@
 *.DSK
 *.BIN
 *.HEX
-
+.idea
+cmake-build-debug
+*.OBJ
+*.LST
+*.M51
