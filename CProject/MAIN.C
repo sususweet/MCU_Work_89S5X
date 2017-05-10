@@ -41,19 +41,19 @@ enum show_mode{
     COUNT
 };
 
-unsigned int sec = 0, minute = 0, hour = 0;
+unsigned int sec = 0, minute = 0, hour = 12;
 unsigned int day = 1, month = 1, year = 2017;
-unsigned int disp_data[8] = {2, 0, 17, 0, 0, 17, 0, 0};
-unsigned int timer_num = 0;
-unsigned int show = TIME;
+unsigned int disp_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+unsigned int show_stage = TIME;
 
 int main(void) {
-    TMOD = 0x10;
+    TMOD = 0x02;
     ET0 = 1;
     EA = 1;
     TR0 = 1;
     TH0 = TIMER0_TH;
     TL0 = TIMER0_TL;
+    setTime();
     while (1) {}
     return 0;
 }
@@ -61,14 +61,22 @@ int main(void) {
 void interrupt0() {
     led_twinkle(disp_data);
     scan_key();
+    return;
 }
 
 void opr_key(unsigned int key_code){
     switch(key_code){
-        case 1:
-            show = DATE;
+        case 0:
+            switch (show_stage){
+                case TIME:
+                    show_stage = DATE;
+                    break;
+                case DATE:
+                    show_stage = TIME;
+                    break;
+            }
             break;
-        case 2:
+        case 1:
             break;
         default:
             break;
@@ -77,7 +85,7 @@ void opr_key(unsigned int key_code){
 
 void scan_key(){
     static key_state = KEY_STATE_RELEASE;
-    unsigned int wait_time = 100;
+    unsigned int wait_time = 0;
     static scan_time = 0;
     switch(key_state) {
         case KEY_STATE_RELEASE:{
@@ -100,8 +108,9 @@ void scan_key(){
             break;
         }
         case KEY_STATE_PRESSED:{
+            unsigned key_code = read_key();
             if (press_key() == 0){
-                opr_key(read_key());
+                opr_key(key_code);
                 key_state = KEY_STATE_RELEASE;
             }
             break;
@@ -122,34 +131,34 @@ unsigned int press_key(){
 
 //扫描键盘，返回键值
 unsigned int read_key(){
-    unsigned char temp_line,temp_row,key_code;
-    unsigned int row,line;
+    unsigned char temp_column,temp_row,key_code;
+    unsigned int row,column;
     KEYBOARD = 0xF0;
-    temp_line = KEYBOARD;
+    temp_column = KEYBOARD;
 
     KEYBOARD = 0x0F;
     temp_row = KEYBOARD;
 
-    switch (temp_line){
-        case 0x70: line = 1; break;
-        case 0xB0: line = 2; break;
-        case 0xD0: line = 3; break;
-        case 0xE0: line = 4; break;
+    switch (temp_column){
+        case 0x70: column = 0; break;
+        case 0xB0: column = 1; break;
+        case 0xD0: column = 2; break;
+        case 0xE0: column = 3; break;
     }
 
     switch (temp_row){
-        case 0x07: row = 1; break;
-        case 0x0B: row = 2; break;
-        case 0x0D: row = 3; break;
-        case 0x0E: row = 4; break;
+        case 0x07: row = 0; break;
+        case 0x0B: row = 1; break;
+        case 0x0D: row = 2; break;
+        case 0x0E: row = 3; break;
     }
-    key_code = key_map[row][line];
+    key_code = key_map[row][column];
     return key_code;
 }
 
 
 void setTime() {
-    switch (show){
+    switch (show_stage){
         case TIME:{
             disp_data[0] = hour / 10;
             disp_data[1] = hour % 10;
@@ -175,8 +184,8 @@ void setTime() {
 }
 
 void led_disp_bit(unsigned int led_data_bit, unsigned int i) {
-    WLE = 0xFF;                // 消影
-    DLE = digital[16];
+    //WLE = 0xFF;                // 消影
+    //DLE = digital[16];
     WLE = _crol_(0xFE, i);    // 送数据
     DLE = digital[led_data_bit];
 }
@@ -184,25 +193,25 @@ void led_disp_bit(unsigned int led_data_bit, unsigned int i) {
 /*数码管闪烁显示程序*/
 void led_twinkle(unsigned int led_data[]) {
     static unsigned int time = 0, flag = 0, i = 0;
+    WLE = 0xFF;
+    DLE = digital[16];
     if (led_data[i] != 17) {
         led_disp_bit(led_data[i], i);
-        //P3 = digital[led_data[i]];		// 送数据
     } else {
         if (flag == 0) {
             led_disp_bit(17, i);
-            //   P3 = digital[17];		// 送数据
         } else {
             led_disp_bit(16, i);
-            // P3 = digital[16];		// 送数据
         }
     }
     i++;
     if (i >= 8) i = 0;
     time++;
-    if (time >= 100) {
+    if (time >= 2500) {
         flag = ~flag;
         time = 0;
     }
+    return;
 }
 
 void time_inc() {
@@ -242,7 +251,7 @@ void time_inc() {
             }
         }
     }
-
+    setTime();
     return;
 }
 unsigned int is_leap_year(unsigned int year){
@@ -254,16 +263,16 @@ unsigned int is_leap_year(unsigned int year){
     return leap_year;
 }
 void int0() interrupt 1{
+    static unsigned int timer_num = 0;
     timer_num++;
-    setTime();
-    interrupt0();
 
-    if (timer_num >= 10000){
+    if (timer_num >= 5000){
         timer_num = 0;
         time_inc();
-        TH0 = TIMER0_TH;
-        TL0 = TIMER0_TL;
+        //TH0 = TIMER0_TH;
+        //TL0 = TIMER0_TL;
     }
+    interrupt0();
 }
 
 /*void led_disp(unsigned int led_data[]){
