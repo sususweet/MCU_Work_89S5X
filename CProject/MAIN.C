@@ -445,7 +445,7 @@ void time_inc(unsigned int type) {
         }
         case YEAR: {
             year++;
-            if (year >= MAX_YEAR) {
+            if (year > MAX_YEAR) {
                 year = MIN_YEAR;
             }
             break;
