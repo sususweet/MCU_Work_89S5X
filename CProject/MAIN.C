@@ -11,6 +11,8 @@
 /*定时器0 0.1ms*/
 #define TIMER0_TH 0x9C
 #define TIMER0_TL 0x9C
+#define MAX_YEAR 2025
+#define MIN_YEAR 2010
 #define KEYBOARD P1
 #define WLE P2        // 位选
 #define DLE P3        // 段选
@@ -19,7 +21,7 @@ void led_disp_bit(unsigned int led_data_bit, unsigned int i);
 void led_twinkle(unsigned int led_data[]);
 void setTime();
 void scan_key();
-void time_inc();
+void time_inc(unsigned int type);
 void init_timer0();
 void time_ms_clr();
 void time_ms_inc();
@@ -50,8 +52,8 @@ enum setting_mode {
     NONE, SECOND, MINUTE, HOUR, DAY, MONTH, YEAR
 };
 
-unsigned int sec = 0, minute = 0, hour = 12;
-unsigned int day = 1, month = 1, year = 2017;
+unsigned int sec = 0, minute = 7, hour = 16;
+unsigned int day = 11, month = 5, year = 2017;
 unsigned int count_msec = 0, count_sec = 0, count_minute = 0;
 unsigned int disp_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned int show_stage = TIME;
@@ -96,40 +98,39 @@ void clr_twinkle(){
 
 void opr_key(unsigned int key_code) {
     switch (key_code) {
-        case 0:
+        case 0:{
+            clr_twinkle();
             switch (show_stage) {
                 case TIME:{
                     show_stage = DATE;
                     setting_stage = NONE;
-                    clr_twinkle();
                     break;
                 }
                 case DATE:{
                     show_stage = COUNT;
                     setting_stage = NONE;
-                    clr_twinkle();
                     break;
                 }
                 case COUNT: {
                     show_stage = TIME;
                     setting_stage = NONE;
-                    clr_twinkle();
                     break;
                 }
                 default:
                     break;
             }
             break;
-        case 1:
+        }
+        case 1:{
             if (show_stage == COUNT) {
+                clr_twinkle();
                 switch (timer_stage) {
                     case START: {
                         timer_stage = STOP;
                         break;
                     }
                     case STOP:{
-                        timer_stage = CLEAR;
-                        time_ms_clr();
+                        timer_stage = START;
                         break;
                     }
                     case CLEAR:{
@@ -140,99 +141,104 @@ void opr_key(unsigned int key_code) {
                         break;
                 }
             }else {
-                switch (setting_stage) {
-                    case SECOND:
-
-                        break;
-                    case MINUTE:
-
-                        break;
-                    case HOUR:
-
-                        break;
-                    case DAY:
-
-                        break;
-                    case MONTH:
-
-                        break;
-                    case YEAR:
-
-                        break;
-                    default:break;
-                }
+                time_inc(setting_stage);
             }
             break;
-        case 2:
+        }
+        case 2: {
+            clr_twinkle();
             if (show_stage == TIME) {
                 switch (setting_stage) {
-                    case NONE:{
+                    case NONE: {
                         setting_stage = SECOND;
+                        twinkle_bit[6] = 1;
+                        twinkle_bit[7] = 1;
                         break;
                     }
 
-                    case SECOND:{
+                    case SECOND: {
                         setting_stage = MINUTE;
+                        twinkle_bit[3] = 1;
+                        twinkle_bit[4] = 1;
                         break;
                     }
 
-                    case MINUTE:{
+                    case MINUTE: {
                         setting_stage = HOUR;
+                        twinkle_bit[0] = 1;
+                        twinkle_bit[1] = 1;
                         break;
                     }
 
-                    case HOUR:{
+                    case HOUR: {
                         setting_stage = NONE;
                         break;
                     }
                     default:
                         break;
                 }
-            }else if (show_stage == DATE) {
+            } else if (show_stage == DATE) {
                 switch (setting_stage) {
-                    case NONE:{
+                    case NONE: {
                         setting_stage = DAY;
+                        twinkle_bit[6] = 1;
+                        twinkle_bit[7] = 1;
                         break;
                     }
-                    case DAY:{
+                    case DAY: {
                         setting_stage = MONTH;
+                        twinkle_bit[4] = 1;
+                        twinkle_bit[5] = 1;
                         break;
                     }
                     case MONTH: {
                         setting_stage = YEAR;
+                        twinkle_bit[0] = 1;
+                        twinkle_bit[1] = 1;
+                        twinkle_bit[2] = 1;
+                        twinkle_bit[3] = 1;
                         break;
                     }
-                    case YEAR:{
+                    case YEAR: {
                         setting_stage = NONE;
                         break;
                     }
                     default:
                         break;
                 }
+            }else {
+                if (timer_stage != START){
+                    timer_stage = CLEAR;
+                    time_ms_clr();
+                }
             }
             break;
+        }
         default:
             break;
     }
 }
 
 void scan_key() {
-    static key_state = KEY_STATE_RELEASE;
-    unsigned int wait_time = 0;
+    static int key_state = KEY_STATE_RELEASE;
+    unsigned int wait_time = 500;
+    static int key_code = -1;
+    unsigned int pressed = press_key();
     static scan_time = 0;
     switch (key_state) {
         case KEY_STATE_RELEASE: {
-            if (press_key() == 1) {
+            if (pressed == 1) {
                 key_state = KEY_STATE_WAITING;
             }
             break;
         }
         case KEY_STATE_WAITING: {
-            if (press_key() == 1) {
+            if (pressed) {
                 scan_time++;
                 if (scan_time >= wait_time) {
                     key_state = KEY_STATE_PRESSED;
                     scan_time = 0;
+                    key_code = read_key();
                 }
             } else {
                 scan_time = 0;
@@ -241,10 +247,11 @@ void scan_key() {
             break;
         }
         case KEY_STATE_PRESSED: {
-            unsigned key_code = read_key();
-            if (press_key() == 0) {
+
+            if (pressed == 0 && key_code >= 0) {
                 opr_key(key_code);
                 key_state = KEY_STATE_RELEASE;
+                key_code = -1;
             }
             break;
         }
@@ -329,8 +336,10 @@ unsigned int read_key() {
 void setTime() {
     switch (show_stage) {
         case TIME: {
-            twinkle_bit[2] = 1;
-            twinkle_bit[5] = 1;
+            if (setting_stage == NONE){
+                twinkle_bit[2] = 1;
+                twinkle_bit[5] = 1;
+            }
             disp_data[0] = hour / 10;
             disp_data[1] = hour % 10;
             disp_data[2] = 17;
@@ -353,8 +362,10 @@ void setTime() {
             break;
         }
         case COUNT: {
-            twinkle_bit[2] = 1;
-            twinkle_bit[5] = 1;
+            if (timer_stage == START){
+                twinkle_bit[2] = 1;
+                twinkle_bit[5] = 1;
+            }
             disp_data[0] = count_minute / 10;
             disp_data[1] = count_minute % 10;
             disp_data[2] = 17;
@@ -410,8 +421,38 @@ void led_twinkle(unsigned int led_data[]) {
     return;
 }
 
-void time_inc() {
-    sec++;
+void time_inc(unsigned int type) {
+    switch (type) {
+        case SECOND: {
+            sec++;
+            break;
+        }
+        case MINUTE: {
+            minute++;
+            break;
+        }
+        case HOUR: {
+            hour++;
+            break;
+        }
+        case DAY: {
+            day++;
+            break;
+        }
+        case MONTH: {
+            month++;
+            break;
+        }
+        case YEAR: {
+            year++;
+            if (year >= MAX_YEAR) {
+                year = MIN_YEAR;
+            }
+            break;
+        }
+        default:
+            break;
+    }
     if (sec >= 60) {
         minute += 1;
         sec = 0;
@@ -499,7 +540,9 @@ void int0() interrupt 1{
     }
     if (time_num >= 5000) {
         time_num = 0;
-        time_inc();
+        if (setting_stage == NONE){
+            time_inc(SECOND);
+        }
         //TH0 = TIMER0_TH;
         //TL0 = TIMER0_TL;
     }
