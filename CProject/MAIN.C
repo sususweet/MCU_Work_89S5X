@@ -51,8 +51,8 @@ enum setting_mode {
     NONE, SECOND, MINUTE, HOUR, DAY, MONTH, YEAR
 };
 
-unsigned int sec = 50, minute = 59, hour = 23;
-unsigned int day = 29, month = 02, year = 2016;
+unsigned int sec = 50, minute = 26, hour = 19;
+unsigned int day = 13, month = 05, year = 2016;
 unsigned int count_msec = 0, count_sec = 0, count_minute = 0;
 unsigned int disp_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned int show_stage = TIME;
