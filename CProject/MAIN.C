@@ -5,7 +5,7 @@
 
 /*char code SST516[3] _at_ 0x003b;*/
 
-#define DIGITAL_ARR_NUM 18
+#define DIGITAL_ARR_NUM 19
 #define TWINKLE_ARR_NUM 8
 
 /*定时器0 0.1ms*/
@@ -25,7 +25,6 @@ void time_inc(unsigned int type);
 void init_timer0();
 void time_ms_clr();
 void time_ms_inc();
-/*void init_timer1();*/
 
 unsigned int press_key();
 unsigned int read_key();
@@ -34,7 +33,7 @@ unsigned int is_leap_year(unsigned int year);
 // 数码管显示数据表
 unsigned char digital[DIGITAL_ARR_NUM] =
         {0x28, 0x7E, 0xA2, 0x62, 0x74, 0x61, 0x21, 0x7A, 0x20,
-         0x60, 0x30, 0x25, 0xA9, 0x26, 0xA1, 0xB1, 0xFF, 0xF7};
+         0x60, 0x30, 0x25, 0xA9, 0x26, 0xA1, 0xB1, 0xFF, 0xF7, 0xDF};
 unsigned int twinkle_bit[TWINKLE_ARR_NUM] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 enum key_states_e {
@@ -52,8 +51,8 @@ enum setting_mode {
     NONE, SECOND, MINUTE, HOUR, DAY, MONTH, YEAR
 };
 
-unsigned int sec = 0, minute = 7, hour = 16;
-unsigned int day = 11, month = 5, year = 2017;
+unsigned int sec = 50, minute = 59, hour = 23;
+unsigned int day = 29, month = 02, year = 2016;
 unsigned int count_msec = 0, count_sec = 0, count_minute = 0;
 unsigned int disp_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned int show_stage = TIME;
@@ -89,12 +88,6 @@ void clr_twinkle(){
     }
     return;
 }
-/*void init_timer1(){
-    ET1 = 1;
-    TR1 = 1;
-    TH1 = TIMER1_TH;
-    TL1 = TIMER1_TL;
-}*/
 
 void opr_key(unsigned int key_code) {
     switch (key_code) {
@@ -141,7 +134,7 @@ void opr_key(unsigned int key_code) {
                         break;
                 }
             }else {
-                time_inc(setting_stage);
+                if(setting_stage != NONE) time_inc(setting_stage);
             }
             break;
         }
@@ -220,36 +213,35 @@ void opr_key(unsigned int key_code) {
 }
 
 void scan_key() {
-    static int key_state = KEY_STATE_RELEASE;
-    unsigned int wait_time = 500;
+    static int key_state = KEY_STATE_RELEASE;   /*状态机状态初始化，采用static保存状态*/
+    unsigned int wait_time = 500;   /*按键扫描等待时间*/
     static int key_code = -1;
-    unsigned int pressed = press_key();
+    unsigned int pressed = press_key(); /*press_key为检测是否有按键按下的函数*/
     static scan_time = 0;
     switch (key_state) {
-        case KEY_STATE_RELEASE: {
+        case KEY_STATE_RELEASE: {   /*若原始状态为无按键按下RELEASE，同时又检测到按键按下，则状态转换到WAITING*/
             if (pressed == 1) {
                 key_state = KEY_STATE_WAITING;
             }
             break;
         }
-        case KEY_STATE_WAITING: {
+        case KEY_STATE_WAITING: {   /*原始状态为WAITING，对按键进行多次判断*/
             if (pressed) {
                 scan_time++;
-                if (scan_time >= wait_time) {
+                if (scan_time >= wait_time) {   /*若按键按下的时间超过一定时间，则认为按键按下，读按键*/
                     key_state = KEY_STATE_PRESSED;
                     scan_time = 0;
-                    key_code = read_key();
+                    key_code = read_key();  /*read_key为读按键的函数*/
                 }
-            } else {
+            } else {    /*若按键松开，则恢复到初始状态*/
                 scan_time = 0;
                 key_state = KEY_STATE_RELEASE;
             }
             break;
         }
-        case KEY_STATE_PRESSED: {
-
+        case KEY_STATE_PRESSED: {   /*若按键被确认按下，则等待按键松开再进行操作*/
             if (pressed == 0 && key_code >= 0) {
-                opr_key(key_code);
+                opr_key(key_code);  /*opr_key为按键事件响应函数*/
                 key_state = KEY_STATE_RELEASE;
                 key_code = -1;
             }
@@ -364,14 +356,14 @@ void setTime() {
         case COUNT: {
             if (timer_stage == START){
                 twinkle_bit[2] = 1;
-                twinkle_bit[5] = 1;
+                twinkle_bit[5] = 0;
             }
             disp_data[0] = count_minute / 10;
             disp_data[1] = count_minute % 10;
             disp_data[2] = 17;
             disp_data[3] = count_sec / 10;
             disp_data[4] = count_sec % 10;
-            disp_data[5] = 17;
+            disp_data[5] = 18;
             disp_data[6] = count_msec / 10;
             disp_data[7] = count_msec % 10;
             break;
@@ -388,14 +380,21 @@ void led_disp_bit(unsigned int led_data_bit, unsigned int i) {
     DLE = digital[led_data_bit];
 }
 
-/*数码管闪烁显示程序*/
+/**
+ * @desc 数码管闪烁显示程序
+ * @param led_data 需要显示的数据数组，从左到右显示
+ * @param twinkle_bit 需要闪烁的数码管位，若某位数码管需要闪烁，则该位置1，否则为0
+ * */
 void led_twinkle(unsigned int led_data[]) {
     static unsigned int time = 0, flag = 0, i = 0;
+    /*位选和段选熄灭，数码管消影*/
     WLE = 0xFF;
     DLE = digital[16];
 
+    /*数码管某些位闪烁设置*/
     if (twinkle_bit[i] == 1){
         if (flag == 0) {
+            /*led_disp_bit 为数码管单位显示函数*/
             led_disp_bit(led_data[i], i);
         } else {
             led_disp_bit(16, i);
@@ -404,16 +403,11 @@ void led_twinkle(unsigned int led_data[]) {
         led_disp_bit(led_data[i], i);
     }
 
-    /*if (led_data[i] != 17) {
-        led_disp_bit(led_data[i], i);
-    } else {
-
-    }*/
-
-
     i++;
+    /*循环扫描数码管的8个数码位*/
     if (i >= 8) i = 0;
     time++;
+    /*数码管某些位闪烁时间控制*/
     if (time >= 2500) {
         flag = ~flag;
         time = 0;
@@ -421,75 +415,125 @@ void led_twinkle(unsigned int led_data[]) {
     return;
 }
 
+/**
+ * @desc 数字钟时间自增程序, 为数字钟时间调整开放接口
+ * @param type 需要进行自增的量, 包含NONE、SECOND、MINUTE、HOUR、DAY、MONTH、YEAR
+ * */
 void time_inc(unsigned int type) {
     switch (type) {
+        case NONE:{
+            sec++;
+            /*一般的时间进位逻辑*/
+            if (sec >= 60) {
+                minute += 1;
+                sec = 0;
+            }
+            if (minute >= 60) {
+                hour += 1;
+                minute = 0;
+            }
+            if (hour >= 24) {
+                hour = 0;
+                day++;
+                if (month == 1 | month == 3 | month == 5 | month == 7 | month == 8 | month == 10 | month == 12) {
+                    if (day > 31) {
+                        day = 1;
+                        month++;
+                        if (month >= 13) {
+                            month = 1;
+                            year++;
+                        }
+                    }
+                }
+                if (month == 4 | month == 6 | month == 9 | month == 11) {
+                    if (day > 30) {
+                        day = 1;
+                        month++;
+                    }
+                }
+                if (month == 2) {
+                    if (is_leap_year(year)) {
+                        if (day >= 30){
+                            day = 1;
+                            month++;
+                        }
+                    } else {
+                        if (day >= 29){
+                            day = 1;
+                            month++;
+                        }
+                    }
+                }
+            }
+            /*时间进位逻辑结束*/
+            break;
+        }
         case SECOND: {
             sec++;
+            if (sec >= 60) sec = 0;
             break;
         }
         case MINUTE: {
             minute++;
+            if (minute >= 60) minute = 0;
             break;
         }
         case HOUR: {
             hour++;
+            if (hour >= 24) hour = 0;
             break;
         }
         case DAY: {
             day++;
+            if (month == 1 | month == 3 | month == 5 | month == 7 | month == 8 | month == 10 | month == 12) {
+                if (day > 31) day = 1;
+            }
+            if (month == 4 | month == 6 | month == 9 | month == 11) {
+                if (day > 30) day = 1;
+            }
+            if (month == 2) {
+                if (is_leap_year(year)) {
+                    if (day >= 30) day = 1;
+                } else {
+                    if (day >= 29) day = 1;
+                }
+            }
             break;
         }
         case MONTH: {
             month++;
+            if (month >= 13) month = 1;
+            if (month == 1 | month == 3 | month == 5 | month == 7 | month == 8 | month == 10 | month == 12) {
+                if (day > 31) day = 1;
+            }
+            if (month == 4 | month == 6 | month == 9 | month == 11) {
+                if (day > 30) day = 30;
+            }
+            if (month == 2) {
+                if (is_leap_year(year)) {
+                    if (day >= 30) day = 29;
+                } else {
+                    if (day >= 29) day = 28;
+                }
+            }
             break;
         }
         case YEAR: {
             year++;
-            if (year > MAX_YEAR) {
-                year = MIN_YEAR;
+            if (year > MAX_YEAR) year = MIN_YEAR;
+            if (month == 2) {
+                if (is_leap_year(year)) {
+                    if (day >= 30) day = 29;
+                } else {
+                    if (day >= 29) day = 28;
+                }
             }
             break;
         }
         default:
             break;
     }
-    if (sec >= 60) {
-        minute += 1;
-        sec = 0;
-    }
-    if (minute >= 60) {
-        hour += 1;
-        minute = 0;
-    }
-    if (hour >= 24) {
-        hour = 0;
-        if (month == 1 | month == 3 | month == 5 | month == 7 | month == 8 | month == 10 | month == 12) {
-            day++;
-            if (day > 31) {
-                day = 1;
-                month++;
-                if (month == 13) {
-                    month = 1;
-                    year++;
-                }
-            }
-        }
-        if (month == 4 | month == 6 | month == 9 | month == 11) {
-            day++;
-            if (day > 30) {
-                day = 1;
-                month++;
-            }
-        }
-        if (month == 2) {
-            day++;
-            if (is_leap_year(year)) {
-                if (day >= 30)day = 1;
-            } else {
-                if (day >= 29)day = 1;
-            }
-        }
-    }
+    /*setTime 函数将内存中记忆的时间送入缓冲区，以便于在数码管上显示*/
     setTime();
     return;
 }
@@ -521,6 +565,11 @@ void time_ms_inc() {
     return;
 }
 
+/**
+ * @desc 闰年判断函数
+ * @param year 需要进行判断的年份
+ * @return 1:是闰年  0:不是闰年
+ * */
 unsigned int is_leap_year(unsigned int year) {
     unsigned int leap_year;
     if ((year + 2000) % 400 == 0) leap_year = 1;    //  被400整除为闰年
@@ -541,7 +590,7 @@ void int0() interrupt 1{
     if (time_num >= 5000) {
         time_num = 0;
         if (setting_stage == NONE){
-            time_inc(SECOND);
+            time_inc(NONE);
         }
         //TH0 = TIMER0_TH;
         //TL0 = TIMER0_TL;
