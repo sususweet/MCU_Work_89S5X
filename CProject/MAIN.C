@@ -8,9 +8,14 @@
 #define DIGITAL_ARR_NUM 19
 #define TWINKLE_ARR_NUM 8
 
-/*定时器0 0.1ms*/
-#define TIMER0_TH 0x9C
-#define TIMER0_TL 0x9C
+/*定时器0 2ms*/
+#define TIMER0_TH 0xF8
+#define TIMER0_TL 0x30
+#define TWINKLE_FREQ 250	/*闪烁周期*/
+#define TIME_FREQ 500	/*时钟计时周期*/
+#define TIMER_FREQ 5	/*秒表计时周期*/
+#define KEY_WAIT 10	/*键盘扫描延迟周期*/
+
 #define MAX_YEAR 2025
 #define MIN_YEAR 2010
 #define KEYBOARD P1
@@ -60,7 +65,7 @@ unsigned int timer_stage = CLEAR;
 unsigned int setting_stage = NONE;
 
 int main(void) {
-    TMOD = 0x22;
+    TMOD = 0x01;
     EA = 1;
     init_timer0();
     setTime();
@@ -214,7 +219,7 @@ void opr_key(unsigned int key_code) {
 
 void scan_key() {
     static int key_state = KEY_STATE_RELEASE;   /*状态机状态初始化，采用static保存状态*/
-    unsigned int wait_time = 500;   /*按键扫描等待时间*/
+    unsigned int wait_time = KEY_WAIT;   /*按键扫描等待时间*/
     static int key_code = -1;
     unsigned int pressed = press_key(); /*press_key为检测是否有按键按下的函数*/
     static scan_time = 0;
@@ -408,7 +413,7 @@ void led_twinkle(unsigned int led_data[]) {
     if (i >= 8) i = 0;
     time++;
     /*数码管某些位闪烁时间控制*/
-    if (time >= 2500) {
+    if (time >= TWINKLE_FREQ) {
         flag = ~flag;
         time = 0;
     }
@@ -583,19 +588,19 @@ void int0() interrupt 1{
     static unsigned int time_num = 0, timer_num = 0;
     time_num++;
     timer_num++;
-    if (timer_stage == START && timer_num >= 50) {
+    if (timer_stage == START && timer_num >= TIMER_FREQ) {
         timer_num = 0;
         time_ms_inc();
     }
-    if (time_num >= 5000) {
+    if (time_num >= TIME_FREQ) {
         time_num = 0;
         if (setting_stage == NONE){
             time_inc(NONE);
         }
-        //TH0 = TIMER0_TH;
-        //TL0 = TIMER0_TL;
     }
     interrupt0();
+    TH0 = TIMER0_TH;
+    TL0 = TIMER0_TL;
 }
 
 /*void led_disp(unsigned int led_data[]){
