@@ -21,12 +21,14 @@
 #define KEYBOARD P1
 #define WLE P2        // 位选
 #define DLE P3        // 段选
+sbit BUZZER=P0^7;
 
 void led_disp_bit(unsigned int led_data_bit, unsigned int i);
 void led_twinkle(unsigned int led_data[]);
 void setTime();
 void scan_key();
 void time_inc(unsigned int type);
+void time_dec(unsigned int type);
 void init_timer0();
 void time_ms_clr();
 void time_ms_inc();
@@ -47,28 +49,35 @@ enum key_states_e {
     KEY_STATE_PRESSED
 };
 enum show_mode {
-    TIME, DATE, COUNT
+    TIME, DATE, COUNT, COUNTDOWN
 };
 enum timer_mode {
     CLEAR, STOP, START
+};
+enum count_down_mode {
+    DOWN_STOP, DOWN_START
 };
 enum setting_mode {
     NONE, SECOND, MINUTE, HOUR, DAY, MONTH, YEAR
 };
 
-unsigned int sec = 50, minute = 26, hour = 19;
-unsigned int day = 13, month = 05, year = 2016;
+unsigned int sec = 50, minute = 29, hour = 18;
+unsigned int day = 16, month = 05, year = 2017;
 unsigned int count_msec = 0, count_sec = 0, count_minute = 0;
+int count_down_sec = 0, count_down_minute = 0, count_down_hour = 0;
+
 unsigned int disp_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned int show_stage = TIME;
 unsigned int timer_stage = CLEAR;
 unsigned int setting_stage = NONE;
+unsigned int count_down_stage = DOWN_STOP;
 
 int main(void) {
     TMOD = 0x01;
     EA = 1;
     init_timer0();
     setTime();
+    BUZZER = 0;
     while (1) {}
     return 0;
 }
@@ -98,20 +107,22 @@ void opr_key(unsigned int key_code) {
     switch (key_code) {
         case 0:{
             clr_twinkle();
+            setting_stage = NONE;
             switch (show_stage) {
                 case TIME:{
                     show_stage = DATE;
-                    setting_stage = NONE;
                     break;
                 }
                 case DATE:{
                     show_stage = COUNT;
-                    setting_stage = NONE;
                     break;
                 }
                 case COUNT: {
+                    show_stage = COUNTDOWN;
+                    break;
+                }
+                case COUNTDOWN: {
                     show_stage = TIME;
-                    setting_stage = NONE;
                     break;
                 }
                 default:
@@ -138,14 +149,30 @@ void opr_key(unsigned int key_code) {
                     default:
                         break;
                 }
-            }else {
+            }else if (show_stage == COUNTDOWN && setting_stage == NONE){
+                clr_twinkle();
+                switch (count_down_stage) {
+                    case DOWN_START: {
+                        count_down_stage = DOWN_STOP;
+                        break;
+                    }
+                    case DOWN_STOP:{
+                        count_down_stage = DOWN_START;
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            } else if (show_stage == COUNTDOWN && setting_stage != NONE){
+                time_dec(setting_stage);
+            } else {
                 if(setting_stage != NONE) time_inc(setting_stage);
             }
             break;
         }
         case 2: {
             clr_twinkle();
-            if (show_stage == TIME) {
+            if (show_stage == TIME || show_stage == COUNTDOWN) {
                 switch (setting_stage) {
                     case NONE: {
                         setting_stage = SECOND;
@@ -204,7 +231,7 @@ void opr_key(unsigned int key_code) {
                     default:
                         break;
                 }
-            }else {
+            } else {
                 if (timer_stage != START){
                     timer_stage = CLEAR;
                     time_ms_clr();
@@ -337,6 +364,9 @@ void setTime() {
                 twinkle_bit[2] = 1;
                 twinkle_bit[5] = 1;
             }
+            if (minute == 0 && sec == 0){
+                BUZZER = 1;
+            } else BUZZER = 0;
             disp_data[0] = hour / 10;
             disp_data[1] = hour % 10;
             disp_data[2] = 17;
@@ -371,6 +401,21 @@ void setTime() {
             disp_data[5] = 18;
             disp_data[6] = count_msec / 10;
             disp_data[7] = count_msec % 10;
+            break;
+        }
+        case COUNTDOWN: {
+            if (count_down_stage == DOWN_START){
+                twinkle_bit[2] = 1;
+                twinkle_bit[5] = 1;
+            }
+            disp_data[0] = count_down_hour / 10;
+            disp_data[1] = count_down_hour % 10;
+            disp_data[2] = 17;
+            disp_data[3] = count_down_minute / 10;
+            disp_data[4] = count_down_minute % 10;
+            disp_data[5] = 17;
+            disp_data[6] = count_down_sec / 10;
+            disp_data[7] = count_down_sec % 10;
             break;
         }
         default:
@@ -543,6 +588,57 @@ void time_inc(unsigned int type) {
     return;
 }
 
+
+/**
+ * @desc 数字钟倒计时自减程序, 为数字钟时间调整开放接口
+ * @param type 需要进行自减的量, 包含NONE、SECOND、MINUTE、HOUR、DAY、MONTH、YEAR
+ * */
+void time_dec(unsigned int type){
+    switch (type) {
+        case NONE:{
+            count_down_sec--;
+            /*一般的倒计时逻辑*/
+            if (count_down_sec <= -1) {
+                count_down_minute--;
+                count_down_sec = 59;
+            }
+            if (count_down_minute <= -1) {
+                count_down_hour--;
+                count_down_minute = 59;
+            }
+            if (count_down_hour <= -1) {
+                count_down_minute = 0;
+                count_down_sec = 0;
+                count_down_hour = 0;
+                clr_twinkle();
+                count_down_stage = DOWN_STOP;
+            }
+            break;
+        }
+        case SECOND: {
+            count_down_sec++;
+            if (count_down_sec >= 60) count_down_sec = 0;
+            break;
+        }
+        case MINUTE: {
+            count_down_minute++;
+            if (count_down_minute >= 60) count_down_minute = 0;
+            break;
+        }
+        case HOUR: {
+            count_down_hour++;
+            if (count_down_hour >= 99) count_down_hour = 0;
+            break;
+        }
+        default:
+            break;
+    }
+
+    /*setTime 函数将内存中记忆的时间送入缓冲区，以便于在数码管上显示*/
+    setTime();
+    return;
+}
+
 void time_ms_clr() {
     count_msec = 0;
     count_sec = 0;
@@ -596,6 +692,9 @@ void int0() interrupt 1{
         time_num = 0;
         if (setting_stage == NONE){
             time_inc(NONE);
+        }
+        if (count_down_stage == DOWN_START){
+            time_dec(NONE);
         }
     }
     interrupt0();
