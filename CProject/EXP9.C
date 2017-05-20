@@ -8,11 +8,13 @@
 #define TIMER0_TH 0xF8
 #define TIMER0_TL 0x30
 #define TIME_FREQ 500	/*时钟计时周期*/
-#define NORMAL_SPEED 100
-#define FAST_SPEED 70
-#define SLOW_SPEED 200
+#define NORMAL_SPEED 1000
+#define FAST_SPEED 800
+#define SLOW_SPEED 2000
+
 
 typedef unsigned char uchar;
+typedef unsigned int uint;
 /*四相双四拍*/
 uchar code FFW[8]={0xf3,0xf9,0xfc,0xf6};
 uchar code REV[8]={0xf3,0xf6,0xfc,0xf9};
@@ -29,7 +31,9 @@ enum motor_state {
 };
 unsigned int motor_stage = POSITIVE;
 void interrupt0();
-void delay(unsigned int xms);
+void delay_us(uint us);
+void delay_ms(uint ms);
+void delay_s(uint s);
 void startMotor();
 
 /*定时器0初始化*/
@@ -52,12 +56,26 @@ int main(void) {
     return 0;
 }
 
+void delay_us(uint us){
+    do {
+        _nop_();
+        us--;
+    } while(us);
+}
+
 /* 定义一个延时xms毫秒的延时函数,xms代表需要延时的毫秒数 */
-void delay(unsigned int xms) {
-    unsigned int a,b,c;
-    for(a=0;a<xms;a++)
-        for(b=0;b<3;b++)
-            for(c=0;c<220;c++);
+void delay_ms(uint ms) {
+    do {
+        delay_us(1000);
+        ms--;
+    } while(ms);
+}
+
+void delay_s(uint s){
+    do {
+        delay_ms(1000);
+        s--;
+    } while(s);
 }
 
 void interrupt0() {
@@ -95,7 +113,7 @@ void startMotor(){
             default:break;
         }
         /*电机转速控制，电机延时时间越长，转速越慢*/
-        delay(delayTime);
+        delay_us(delayTime);
     }
 }
 
