@@ -61,7 +61,7 @@ enum setting_mode {
     NONE, SECOND, MINUTE, HOUR, DAY, MONTH, YEAR
 };
 
-unsigned int sec = 50, minute = 29, hour = 18;
+unsigned int sec = 49, minute = 59, hour = 23;
 unsigned int day = 16, month = 05, year = 2017;
 unsigned int count_msec = 0, count_sec = 0, count_minute = 0;
 int count_down_sec = 0, count_down_minute = 0, count_down_hour = 0;
@@ -363,10 +363,11 @@ void setTime() {
             if (setting_stage == NONE){
                 twinkle_bit[2] = 1;
                 twinkle_bit[5] = 1;
+                if (minute == 0 && sec == 0){
+                    BUZZER = 1;
+                } else BUZZER = 0;
             }
-            if (minute == 0 && sec == 0){
-                BUZZER = 1;
-            } else BUZZER = 0;
+
             disp_data[0] = hour / 10;
             disp_data[1] = hour % 10;
             disp_data[2] = 17;
@@ -591,7 +592,7 @@ void time_inc(unsigned int type) {
 
 /**
  * @desc 数字钟倒计时自减程序, 为数字钟时间调整开放接口
- * @param type 需要进行自减的量, 包含NONE、SECOND、MINUTE、HOUR、DAY、MONTH、YEAR
+ * @param type 需要进行自减的量, 包含NONE、SECOND、MINUTE、HOUR
  * */
 void time_dec(unsigned int type){
     switch (type) {
