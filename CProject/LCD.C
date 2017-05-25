@@ -19,12 +19,9 @@ sbit RST_LCD = P2^5;
 #define TWINKLE_FREQ 250    /*闪烁周期*/
 #define TIME_FREQ 500    /*时钟计时周期*/
 #define DISP_FREQ 200   /*LCD显示刷新周期*/
+#define INFO_SHOW_FREQ 1500   /*LCD信息显示时间*/
 #define KEY_WAIT 10    /*键盘扫描延迟周期*/
 #define MAX_SPACE 3
-
-#define MEASURE_TEMP 0x03
-#define MEASURE_HUMI 0x05
-#define RESET 0x1e
 
 typedef unsigned char uchar;
 typedef struct {
@@ -45,15 +42,15 @@ enum key_states_e {
     KEY_STATE_PRESSED
 };
 enum working_state {
-    NORMAL, COME_IN, COME_OUT
+    NORMAL, PARK_IN, PARK_OUT, PARK_NO_SPACE, PARK_NO_CAR
 };
 
-unsigned char code DateStr[]=__DATE__;
-unsigned char code TimeStr[]=__TIME__;
+unsigned char code DateStr[] = __DATE__;
+unsigned char code TimeStr[] = __TIME__;
 uchar idata LCDTable1[16], LCDTable2[16], LCDTable3[16], LCDTable4[16];
-
+unsigned int car_id = 1;
 unsigned int working_stage = NORMAL;
-unsigned int nowTime = 0;
+unsigned int nowTime = 0, info_num = 0;
 unsigned int sec = 0, minute = 0, hour = 0;
 /*unsigned int day = 0, month = 0, year = 0;*/
 ParkInfo idata parkSpace[MAX_SPACE];
@@ -271,166 +268,77 @@ int getSpace() {
     return -1;
 }
 
-/*
-void displaywendu(void)
-{
-uchar i;
-write_12864com(0x94);
-for(i=0;i<3;i++)
-{
-write_dat(wendu[i]);
-delay_50us(1);
-}
-for(i=0;i<1;i++)
-{
-write_dat(table5[i]);
-delay_50us(1);
-}
-for(i=4;i<5;i++)
-{
-write_dat(wendu[i]);
-delay_50us(1);
-}
-}
-void displayshidu(void)
-{
-uchar i;
-writeCom_12864(0x8C);
-for(i=0;i<3;i++)
-{
-write_dat(shidu[i]);
-delay_50us(1);
-}
-for(i=0;i<1;i++)
-{
-write_dat(table5[i]);
-delay_50us(1);
-}
-for(i=4;i<5;i++)
-{
-write_dat(shidu[i]);
-delay_50us(1);
-}
-}
-//写字节程序
-char s_write_byte(unsigned char value)
-{
-unsigned char i,error=0;
-for (i=0x80;i>0;i>>=1) //高位为1，循环右移
-{
-if (i&value) DATA_LCD=1; //和要发送的数相与，结果为发送的位
- else DATA_LCD=0;
- SCK=1;
- _nop_();_nop_();_nop_(); //延时3us
- SCK=0;
-}
-DATA_LCD=1; //释放数据线
-SCK=1;
-error=DATA_LCD; //检查应答信号，确认通讯正常
-_nop_();_nop_();_nop_();
-SCK=0;
-DATA_LCD=1;
-return error; //error=1 通讯错误
-}
-//读字节程序
-char s_read_byte(unsigned char ack)
-{
-unsigned char i,val=0;
-DATA_LCD=1; //释放数据线
-for(i=0x80;i>0;i>>=1) //高位为1，循环右移
-{
-SCK=1;
- if(DATA_LCD) val=(val|i); //读一位数据线的值
- SCK=0;
-}
-DATA_LCD=!ack; //如果是校验，读取完后结束通讯；
-SCK=1;
-_nop_();_nop_();_nop_(); //延时3us
-SCK=0;
-_nop_();_nop_();_nop_();
-DATA_LCD=1; //释放数据线
-return val;
-}
-//启动传输
-void s_transstart(void)
-{
- DATA_LCD=1; SCK=0; //准备
- _nop_();
- SCK=1;
- _nop_();
- DATA_LCD=0;
- _nop_();
- SCK=0;
- _nop_();_nop_();_nop_();
- SCK=1;
- _nop_();
- DATA_LCD=1;
- _nop_();
- SCK=0;
-}
-//连接复位
-void s_connectionreset(void)
-{
-unsigned char i;
-DATA_LCD=1; SCK=0; //准备
-for(i=0;i<9;i++) //DATA保持高，SCK时钟触发9次，发送启动传输，通迅即复位
-{
-SCK=1;
- SCK=0;
-}
-s_transstart(); //启动传输
-}*/
-/*
-//软复位程序
-char s_softreset(void)
-{
-unsigned char error=0;
-s_connectionreset(); //启动连接复位
-error+=s_write_byte(RESET); //发送复位命令
-return error; //error=1 通讯错误
-}
-//温湿度测量
-char s_measure(unsigned char *p_value, unsigned char *p_checksum, unsigned char mode)
-{
-unsigned error=0;
-unsigned int i;
-s_transstart(); //启动传输
-switch(mode) //选择发送命令
- {
-case TEMP : error+=s_write_byte(MEASURE_TEMP); break; //测量温度
- case HUMI : error+=s_write_byte(MEASURE_HUMI); break; //测量湿度
- default : break;
-}
-for (i=0;i<65535;i++) if(DATA_LCD==0) break; //等待测量结束
-if(DATA_LCD) error+=1; // 如果长时间数据线没有拉低，说明测量错误
-*(p_value) =s_read_byte(ACK); //读第一个字节，高字节 (MSB)
-*(p_value+1)=s_read_byte(ACK); //读第二个字节，低字节 (LSB)
-*p_checksum =s_read_byte(noACK); //read CRC校验码
-return error; // error=1 通讯错误
-}
-//温湿度值标度变换及温度补偿
-void calc_sth10(float *p_humidity ,float *p_temperature)
-{
-const float C1=-4.0; // 12位湿度精度 修正公式
-const float C2=+0.0405; // 12位湿度精度修正公式
-const float C3=-0.0000028; // 12位湿度精度修正公式
-const float T1=+0.01; // 14位温度精度 5V条件 修正公式
-const float T2=+0.00008; // 14位温度精度 5V条件 修正公式
-float rh=*p_humidity; // rh: 12位 湿度
-float t=*p_temperature; // t: 14位温度
-float rh_lin; // rh_lin: 湿度 linear值
-float rh_true; // rh_true: 湿度 ture值
-float t_C; // t_C : 温度 ℃
-t_C=t*0.01 - 40; //补偿温度
-rh_lin=C3*rh*rh + C2*rh + C1; //相对湿度非线性补偿
-rh_true=(t_C-25)*(T1+T2*rh)+rh_lin; //相对湿度对于温度依赖性补偿
-if(rh_true>100)rh_true=100; //湿度最大修正
-if(rh_true<0.1)rh_true=0.1; //湿度最小修正
-*p_temperature=t_C; //返回温度结果
-*p_humidity=rh_true; //返回湿度结果
+/*获取剩余空间数目*/
+unsigned int getSpaceNum() {
+    unsigned int i = 0, count = 0;
+    for (i = 0; i < MAX_SPACE; i++) {
+        if (parkSpace[i].used == 0) count++;
+    }
+    return count;
 }
 
-*/
+void park_in(unsigned int id){
+    parkSpace[id].startTime = nowTime;
+    parkSpace[id].carID = car_id;
+    car_id++;
+    parkSpace[id].used = 1;
+    parkSpace[id].pay = 0;
+    strcpy(LCDTable1,"    欢迎光临    ");
+    sprintf(LCDTable2, "车牌号：浙A%04d", parkSpace[id].carID);
+    sprintf(LCDTable3, "车位:%d  开始计费",id + 1);
+    sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+    working_stage = PARK_IN;
+    info_num = 0;
+    return;
+}
+
+void park_out(unsigned int id){
+    strcpy(LCDTable1,"    欢迎使用    ");
+    sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+    if (parkSpace[id].used == 1){
+        parkSpace[id].endTime = nowTime;
+        parkSpace[id].used = 0;
+        parkSpace[id].pay = (float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5);
+        sprintf(LCDTable2, "车牌号：浙A%04d", parkSpace[id].carID);
+        sprintf(LCDTable3, "  应付费：%1.2f  ",parkSpace[id].pay);
+    }else{
+        sprintf(LCDTable2, "  车位没有车辆  ", parkSpace[id].carID);
+        strcpy(LCDTable3, "                ");
+    }
+    working_stage = PARK_OUT;
+    info_num = 0;
+    return;
+}
+
+void opr_key(unsigned int key_code) {
+    switch (key_code) {
+        case 0: {
+            int space_id = getSpace();
+            if (space_id != -1){
+                park_in((unsigned int) space_id);
+            }
+            break;
+        }
+        case 1: {
+            park_out(0);
+            break;
+        }
+        case 2: {
+            park_out(1);
+            break;
+        }
+        case 3: {
+            park_out(2);
+            break;
+        }
+        case 4: {
+
+        }
+        default:
+            break;
+    }
+}
+
 
 //忙检测，若忙则等待，最长等待时间为60ms
 void busyCheck_12864(void) {
@@ -483,15 +391,21 @@ void writeData_12864(uchar dat) {
 */
 
 void write_display_cache() {
+    sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
     switch (working_stage) {
         case NORMAL: {
-            unsigned int park_space = 0;
+            unsigned int park_space = getSpaceNum();
             char *nowTimeStr = NULL;
             strcpy(LCDTable1,"    欢迎使用    ");
-            sprintf(LCDTable2, "剩余车位：%d     ", park_space);
+            if (park_space <= 0){
+                sprintf(LCDTable2, "    车位已满    ", park_space);
+            }else{
+                sprintf(LCDTable2, "剩余车位：%d     ", park_space);
+            }
+
             sprintf(LCDTable3, "                ");
             //sprintf(LCDTable3, "");
-            sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+
             /*sprintf(LCDTable3, "    %02d:%02d:%02d    ", hour, minute, sec);*/
             //strcpy(LCDTable2, strcat("剩余车位：", (unsigned char) park_space));
             /*sprintf(LCDTable2, "剩余车位：%d    ", park_space);
@@ -614,21 +528,7 @@ void init12864lcd(void) {
     delay_50us(10);
 }*/
 
-void opr_key(unsigned int key_code) {
-    switch (key_code) {
-        case 0: {
 
-        }
-        case 1: {
-
-        }
-        case 2: {
-
-        }
-        default:
-            break;
-    }
-}
 
 int main(void) {
     /*value humi_val, temp_val; //定义两个共同体，一个用于湿度，一个用于温度   */
@@ -708,6 +608,7 @@ void int0() interrupt 1{
     static unsigned int time_num = 0,disp_num = 0;
     time_num++;
     disp_num++;
+    info_num++;
 
     if (time_num >= TIME_FREQ) {
         time_num = 0;
@@ -719,6 +620,11 @@ void int0() interrupt 1{
         write_display_cache();
         displayLCD();
         disp_num = 0;
+    }
+
+    if (info_num >= INFO_SHOW_FREQ) {
+        working_stage = NORMAL;
+        info_num = 0;
     }
 
     interrupt0();
