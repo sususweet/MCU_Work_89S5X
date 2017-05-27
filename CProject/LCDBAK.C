@@ -12,16 +12,23 @@ sbit PSB_LCD = P2^3;
 sbit RST_LCD = P2^5;
 
 #define KEYBOARD P1
+/*注意，motor只能使用P0的高四位，同时在操作motor时记得关液晶屏的EN*/
+#define MOTOR P3
+/*注意，读取AD转换器数据时，记得关液晶显示EN*/
+#define AD_OUTPUT P0
 
-/*定时器0 2ms*/
-#define TIMER0_TH 0xF8
-#define TIMER0_TL 0x30
-#define TWINKLE_FREQ 250    /*闪烁周期*/
-#define TIME_FREQ 500    /*时钟计时周期*/
-#define DISP_FREQ 200   /*LCD显示刷新周期*/
-#define INFO_SHOW_FREQ 1500   /*LCD信息显示时间*/
-#define KEY_WAIT 10    /*键盘扫描延迟周期*/
+/*定时器0 1ms*/
+#define TIMER0_TH 0xFC
+#define TIMER0_TL 0x18
+#define TWINKLE_FREQ 500    /*闪烁周期*/
+#define TIME_FREQ 1000    /*时钟计时周期*/
+#define DISP_FREQ 400   /*LCD显示刷新周期*/
+#define INFO_SHOW_FREQ 3000   /*LCD信息显示时间*/
+
+
+#define KEY_WAIT 20    /*键盘扫描延迟周期*/
 #define MAX_SPACE 3
+#define TWINKLE_ROW_NUM 4
 
 typedef unsigned char uchar;
 typedef struct {
@@ -33,9 +40,10 @@ typedef struct {
 } ParkInfo;
 //定义共用同类型
 typedef union {
-    unsigned int i;
-    float f;
-} value;
+    uchar diff_hours;
+    uchar diff_minutes;
+    uchar diff_seconds;
+} DiffTime;
 enum key_states_e {
     KEY_STATE_RELEASE,
     KEY_STATE_WAITING,
@@ -44,12 +52,21 @@ enum key_states_e {
 enum working_state {
     NORMAL, PARK_IN, PARK_OUT, PARK_NO_SPACE, PARK_NO_CAR
 };
+enum motor_state {
+    MOTOR_CLOSING, MOTOR_CLOSED, MOTOR_OPENING, MOTOR_OPENED, MOTOR_BUSY
+};
 
-unsigned char code DateStr[] = __DATE__;
-unsigned char code TimeStr[] = __TIME__;
+/*四相双四拍*/
+uchar code FFW[8]={0xf3,0xf9,0xfc,0xf6};
+uchar code REV[8]={0xf3,0xf6,0xfc,0xf9};
+
+uchar code DateStr[] = __DATE__;
+uchar code TimeStr[] = __TIME__;
 uchar idata LCDTable1[16], LCDTable2[16], LCDTable3[16], LCDTable4[16];
+unsigned int idata twinkle_row[TWINKLE_ROW_NUM] = {0, 0, 0, 0};
 unsigned int car_id = 1;
 unsigned int working_stage = NORMAL;
+uchar motor_stage = MOTOR_CLOSED;
 unsigned int nowTime = 0, info_num = 0;
 unsigned int sec = 0, minute = 0, hour = 0;
 /*unsigned int day = 0, month = 0, year = 0;*/
@@ -66,6 +83,14 @@ unsigned int read_key();
 
 
 /*基础函数库开始*/
+void clr_twinkle(){
+    unsigned int i;
+    for (i = 0; i < TWINKLE_ROW_NUM; i++){
+        twinkle_row[i] = 0;
+    }
+    return;
+}
+
 void delay_us(unsigned int us) {
     do {
         _nop_();
@@ -111,38 +136,58 @@ void time_inc() {
     }
     if (hour >= 24) {
         hour = 0;
-        /* day++;
-         if (month == 1 | month == 3 | month == 5 | month == 7 | month == 8 | month == 10 | month == 12) {
-             if (day > 31) {
-                 day = 1;
-                 month++;
-                 if (month >= 13) {
-                     month = 1;
-                     year++;
-                 }
-             }
-         }
-         if (month == 4 | month == 6 | month == 9 | month == 11) {
-             if (day > 30) {
-                 day = 1;
-                 month++;
-             }
-         }
-         if (month == 2) {
-             if (is_leap_year(year)) {
-                 if (day >= 30) {
-                     day = 1;
-                     month++;
-                 }
-             } else {
-                 if (day >= 29) {
-                     day = 1;
-                     month++;
-                 }
-             }
-         }*/
+       /* day++;
+        if (month == 1 | month == 3 | month == 5 | month == 7 | month == 8 | month == 10 | month == 12) {
+            if (day > 31) {
+                day = 1;
+                month++;
+                if (month >= 13) {
+                    month = 1;
+                    year++;
+                }
+            }
+        }
+        if (month == 4 | month == 6 | month == 9 | month == 11) {
+            if (day > 30) {
+                day = 1;
+                month++;
+            }
+        }
+        if (month == 2) {
+            if (is_leap_year(year)) {
+                if (day >= 30) {
+                    day = 1;
+                    month++;
+                }
+            } else {
+                if (day >= 29) {
+                    day = 1;
+                    month++;
+                }
+            }
+        }*/
     }
     return;
+}
+
+uchar time_diff_hours(unsigned int endTime, unsigned int startTime){
+    unsigned int seconds = endTime - startTime;
+    diff_hours= (uchar) (seconds / 3600);
+    return diff_hours;
+}
+
+uchar time_diff_minutes(unsigned int endTime, unsigned int startTime){
+    unsigned int seconds = endTime - startTime;
+    seconds %= 3600 ;
+    diff_minutes= (uchar) (seconds / 60);
+    return diff_minutes;
+}
+
+uchar time_diff_seconds(unsigned int endTime, unsigned int startTime){
+    unsigned int seconds = endTime - startTime;
+    seconds %= 3600 ;
+    diff_seconds= (uchar) (seconds % 60);
+    return diff_seconds;
 }
 
 void scan_key() {
@@ -258,6 +303,47 @@ unsigned int read_key() {
 }
 /*基础函数库结束*/
 
+/* 根据当前状态全局变量给电机提供驱动脉冲 */
+void startMotor(uchar type){
+    static unsigned char motor_index = 0, motor_count = 0, motor_cache = 0;
+    switch (type){
+        case MOTOR_CLOSING:{
+            motor_cache = MOTOR_CLOSED;
+            motor_stage = MOTOR_BUSY;
+            MOTOR = FFW[motor_index];
+            break;
+        }
+        case MOTOR_OPENING:{
+            motor_cache = MOTOR_OPENED;
+            motor_stage = MOTOR_BUSY;
+            MOTOR = REV[motor_index];
+            break;
+        }
+        case MOTOR_BUSY:{
+            switch (motor_cache){
+                case MOTOR_CLOSED:{
+                    MOTOR = FFW[motor_index];
+                    break;
+                }
+                case MOTOR_OPENED:{
+                    MOTOR = REV[motor_index];
+                    break;
+                }
+                default:return;
+            }
+        }
+        default:return;
+    }
+
+    motor_index++;
+    if (motor_index >= 4) {
+        motor_index = 0;
+        motor_count++;
+        if(motor_count>=5) {
+            motor_stage = motor_cache;
+        }
+    }
+}
 
 /*获取剩余空间*/
 int getSpace() {
@@ -278,6 +364,7 @@ unsigned int getSpaceNum() {
 }
 
 void park_in(unsigned int id){
+    //clr_twinkle();
     parkSpace[id].startTime = nowTime;
     parkSpace[id].carID = car_id;
     car_id++;
@@ -293,21 +380,56 @@ void park_in(unsigned int id){
 }
 
 void park_out(unsigned int id){
+    DiffTime period;
+    clr_twinkle();
     strcpy(LCDTable1,"    欢迎使用    ");
-    sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
     if (parkSpace[id].used == 1){
         parkSpace[id].endTime = nowTime;
         parkSpace[id].used = 0;
         parkSpace[id].pay = (float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5);
+        period = time_diff(parkSpace[id].endTime, parkSpace[id].startTime);
         sprintf(LCDTable2, "车牌号：浙A%04d", parkSpace[id].carID);
         sprintf(LCDTable3, "  应付费：%1.2f  ",parkSpace[id].pay);
+        sprintf(LCDTable4, "停车时间%02d:%02d:%02d", period.diff_hours, period.diff_minutes, period.diff_seconds);
     }else{
         sprintf(LCDTable2, "  车位没有车辆  ", parkSpace[id].carID);
         strcpy(LCDTable3, "                ");
+        sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
     }
     working_stage = PARK_OUT;
     info_num = 0;
     return;
+}
+
+void waiting() {
+    clr_twinkle();
+    sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+    if (working_stage == NORMAL) {
+        unsigned int park_space = getSpaceNum();
+        char *nowTimeStr = NULL;
+        strcpy(LCDTable1,"    欢迎使用    ");
+        if (park_space <= 0){
+            sprintf(LCDTable2, "    车位已满    ", park_space);
+            twinkle_row[1] = 0;
+        }else{
+            sprintf(LCDTable2, "剩余车位：%d     ", park_space);
+        }
+        //sprintf(LCDTable3, "");
+
+        /*sprintf(LCDTable3, "    %02d:%02d:%02d    ", hour, minute, sec);*/
+        //strcpy(LCDTable2, strcat("剩余车位：", (unsigned char) park_space));
+        /*sprintf(LCDTable2, "剩余车位：%d    ", park_space);
+
+        /*sprintf(LCDTable4, "By sususweet");*/
+        /*strcpy(LCDTable3,nowTimeStr);
+        strcpy(LCDTable4,"By sususweet");*/
+    }
+    if (motor_stage==MOTOR_BUSY){
+        sprintf(LCDTable3, "开启道闸注意安全");
+        twinkle_row[2] = 0;
+    }else{
+        sprintf(LCDTable3, "                ");
+    }
 }
 
 void opr_key(unsigned int key_code) {
@@ -332,10 +454,19 @@ void opr_key(unsigned int key_code) {
             break;
         }
         case 4: {
-
+            switch (motor_stage){
+                case MOTOR_CLOSED:{
+                    motor_stage = MOTOR_OPENING;
+                    break;
+                }
+                case MOTOR_OPENED:{
+                    motor_stage = MOTOR_CLOSING;
+                    break;
+                }
+                default:break;
+            }
         }
-        default:
-            break;
+        default: break;
     }
 }
 
@@ -390,36 +521,6 @@ void writeData_12864(uchar dat) {
 }
 */
 
-void write_display_cache() {
-    sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
-    switch (working_stage) {
-        case NORMAL: {
-            unsigned int park_space = getSpaceNum();
-            char *nowTimeStr = NULL;
-            strcpy(LCDTable1,"    欢迎使用    ");
-            if (park_space <= 0){
-                sprintf(LCDTable2, "    车位已满    ", park_space);
-            }else{
-                sprintf(LCDTable2, "剩余车位：%d     ", park_space);
-            }
-
-            sprintf(LCDTable3, "                ");
-            //sprintf(LCDTable3, "");
-
-            /*sprintf(LCDTable3, "    %02d:%02d:%02d    ", hour, minute, sec);*/
-            //strcpy(LCDTable2, strcat("剩余车位：", (unsigned char) park_space));
-            /*sprintf(LCDTable2, "剩余车位：%d    ", park_space);
-
-            /*sprintf(LCDTable4, "By sususweet");*/
-            /*strcpy(LCDTable3,nowTimeStr);
-            strcpy(LCDTable4,"By sususweet");*/
-            break;
-        }
-        default:
-            break;
-    }
-}
-
 void init_LCD(void) {
     RST_LCD = 0;
     delay_us(80);
@@ -437,41 +538,74 @@ void init_LCD(void) {
 }
 
 void displayLCD(void) {
+    static unsigned int time = 0, flag = 0;
     unsigned int i;
     writeCom_12864(0x01);   //清屏，并且DDRAM数据指针清零
     //delay_us(10);
     writeCom_12864(0x80);
     for(i = 0; i < 16; i++){
-        if(LCDTable1[i] != '\0'){
-            writeData_12864(LCDTable1[i]);
-        }else{
-            writeData_12864(0x20);
+        if(twinkle_row[0] == 0){
+            if (flag == 0) {
+                if(LCDTable1[i] != '\0'){
+                    writeData_12864(LCDTable1[i]);
+                }else{
+                    writeData_12864(0x20);
+                }
+            } else {
+                writeData_12864(0x20);
+            }
         }
     }
 
     writeCom_12864(0x90);
     for(i = 0; i < 16; i++){
-        if(LCDTable2[i] != '\0'){
-            writeData_12864(LCDTable2[i]);
-        }else{
-            writeData_12864(0x20);
+        if(twinkle_row[1] == 0){
+            if (flag == 0) {
+                if(LCDTable2[i] != '\0'){
+                    writeData_12864(LCDTable2[i]);
+                }else{
+                    writeData_12864(0x20);
+                }
+            } else {
+                writeData_12864(0x20);
+            }
         }
     }
+
     writeCom_12864(0x88);
     for (i = 0; i < 16; i++) {
-        if(LCDTable3[i] != '\0'){
-            writeData_12864(LCDTable3[i]);
-        }else{
-            writeData_12864(0x20);
+        if(twinkle_row[2] == 0){
+            if (flag == 0) {
+                if(LCDTable3[i] != '\0'){
+                    writeData_12864(LCDTable3[i]);
+                }else{
+                    writeData_12864(0x20);
+                }
+            } else {
+                writeData_12864(0x20);
+            }
         }
     }
     writeCom_12864(0x98);
     for (i = 0; i < 16; i++) {
-        if(LCDTable4[i] != '\0'){
-            writeData_12864(LCDTable4[i]);
-        }else{
-            writeData_12864(0x20);
+        if(twinkle_row[3] == 0){
+            if (flag == 0) {
+                if(LCDTable4[i] != '\0'){
+                    writeData_12864(LCDTable4[i]);
+                }else{
+                    writeData_12864(0x20);
+                }
+            } else {
+                writeData_12864(0x20);
+            }
         }
+    }
+
+    time++;
+    /*LCD某些行闪烁时间控制*/
+    if (time >= TWINKLE_FREQ) {
+        flag = ~flag;
+        time = 0;
     }
 }
 
@@ -601,11 +735,14 @@ void init_timer0() {
 
 void interrupt0() {
     scan_key();
+    /*EA = 0;
+    startMotor(motor_stage);
+    EA = 1;*/
     return;
 }
 
 void int0() interrupt 1{
-    static unsigned int time_num = 0,disp_num = 0;
+    static unsigned int time_num = 0, disp_num = 0;
     time_num++;
     disp_num++;
     info_num++;
@@ -617,7 +754,7 @@ void int0() interrupt 1{
     }
 
     if (disp_num >= DISP_FREQ) {
-        write_display_cache();
+        waiting();
         displayLCD();
         disp_num = 0;
     }
