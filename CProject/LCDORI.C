@@ -19,23 +19,23 @@ sbit RST_LCD = P2^5;
 
 #define KEYBOARD P1
 /*注意，motor只能使用P0的高四位，同时在操作motor时记得关液晶屏的EN*/
-#define MOTOR P3
+#define MOTOR P0
 /*注意，读取AD转换器数据时，记得关液晶显示EN*/
 #define AD_OUTPUT P0
 
-/*定时器0 1ms*//*
+/*定时器0 2ms*//*
 #define TIMER0_TH 0xF8
 #define TIMER0_TL 0x30*/
 
-#define TIMER0_TH 0xFC
-#define TIMER0_TL 0x18
-#define TWINKLE_FREQ 400    /*闪烁周期*/
-#define TIME_FREQ 1000    /*时钟计时周期*/
-#define DISP_FREQ 400   /*LCD显示刷新周期*/
-#define INFO_SHOW_FREQ 3000   /*LCD信息显示时间*/
+#define TIMER0_TH 0xF8
+#define TIMER0_TL 0x30
+#define TWINKLE_FREQ 200    /*闪烁周期*/
+#define MOTOR_FREQ 10    /*电机脉冲周期*/
+#define TIME_FREQ 500    /*时钟计时周期*/
+#define DISP_FREQ 200   /*LCD显示刷新周期*/
+#define INFO_SHOW_FREQ 1500   /*LCD信息显示时间*/
 
-
-#define KEY_WAIT 20    /*键盘扫描延迟周期*/
+#define KEY_WAIT 10    /*键盘扫描延迟周期*/
 #define MAX_SPACE 3
 #define TWINKLE_ROW_NUM 4
 
@@ -44,7 +44,7 @@ typedef struct {
     unsigned int startTime;
     unsigned int endTime;
     unsigned char used;
-    unsigned char carID;
+    unsigned int carID;
 } ParkInfo;
 enum key_states_e {
     KEY_STATE_RELEASE,
@@ -71,7 +71,7 @@ unsigned int working_stage = NORMAL;
 uchar motor_stage = MOTOR_CLOSED;
 unsigned int nowTime = 0, info_num = 0;
 unsigned int sec = 0, minute = 0, hour = 0;
-unsigned int time_num = 0, disp_num = 0;
+
 
 ParkInfo idata parkSpace[MAX_SPACE];
 
@@ -303,18 +303,20 @@ void startMotor(uchar type){
                     MOTOR = REV[motor_index];
                     break;
                 }
-                default:break;
+                default:return;
             }
+            break;
         }
-        default:break;
+        default:return;
     }
 
     motor_index++;
     if (motor_index >= 4) {
         motor_index = 0;
         motor_count++;
-        if(motor_count>=5) {
+        if(motor_count>=60) {
             motor_stage = motor_cache;
+            motor_count = 0;
         }
     }
 }
@@ -338,7 +340,7 @@ unsigned int getSpaceNum() {
 }
 
 void park_in(unsigned int id){
-    //clr_twinkle();
+    clr_twinkle();
     parkSpace[id].startTime = nowTime;
     parkSpace[id].carID = car_id;
     car_id++;
@@ -346,30 +348,72 @@ void park_in(unsigned int id){
     strcpy(LCDTable1,"    欢迎光临    ");
     sprintf(LCDTable2, "车牌号：浙A%04d", parkSpace[id].carID);
     sprintf(LCDTable3, "车位:%d  开始计费",id + 1);
-    sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+    ///sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
     working_stage = PARK_IN;
     info_num = 0;
     return;
 }
 
 void park_out(unsigned int id){
-    //clr_twinkle();
-    strcpy(LCDTable1,"    一路顺风    ");
-    twinkle_row[0] = 1;
+    unsigned int park_hours,park_minutes,park_seconds;
+    clr_twinkle();
+
     if (parkSpace[id].used == 1){
         parkSpace[id].endTime = nowTime;
         parkSpace[id].used = 0;
-        sprintf(LCDTable2, "车牌号：浙A%04d", parkSpace[id].carID);
-        sprintf(LCDTable3, "  应付费：%1.2f  ",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5));
-        sprintf(LCDTable4, "停车时间%02d:%02d:%02d", time_diff_hours(parkSpace[id].endTime, parkSpace[id].startTime),time_diff_minutes(parkSpace[id].endTime, parkSpace[id].startTime), time_diff_seconds(parkSpace[id].endTime, parkSpace[id].startTime));
+        park_hours = time_diff_hours(parkSpace[id].endTime, parkSpace[id].startTime);
+        park_minutes = time_diff_minutes(parkSpace[id].endTime, parkSpace[id].startTime);
+        park_seconds = time_diff_seconds(parkSpace[id].endTime, parkSpace[id].startTime);
+        sprintf(LCDTable1, "车牌号：浙A%04d", parkSpace[id].carID);
+        sprintf(LCDTable2, "  应付费：%1.2f  ",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5));
+        sprintf(LCDTable3, "停车时间%02d:%02d:%02d", park_hours, park_minutes, park_seconds);
     }else{
-        sprintf(LCDTable2, "  车位没有车辆  ", parkSpace[id].carID);
+        strcpy(LCDTable1,"    欢迎使用    ");
+        strcpy(LCDTable2, "  车位没有车辆  ");
+        twinkle_row[1] = 1;
         strcpy(LCDTable3, "                ");
-        sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+        //sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
     }
     working_stage = PARK_OUT;
     info_num = 0;
     return;
+}
+
+void waiting() {
+    unsigned int park_space = getSpaceNum();
+    if(working_stage == NORMAL){
+        clr_twinkle();
+        sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+        strcpy(LCDTable1,"    欢迎使用    ");
+        if (park_space <= 0){
+            sprintf(LCDTable2, "    车位已满    ", park_space);
+            twinkle_row[1] = 1;
+        }else{
+            sprintf(LCDTable2, "剩余车位：%d     ", park_space);
+        }
+        if (motor_stage==MOTOR_BUSY){
+            sprintf(LCDTable3, "道闸工作注意安全");
+            twinkle_row[2] = 1;
+        }else{
+            sprintf(LCDTable3, "                ");
+        }
+        //sprintf(LCDTable3, "                ");
+        //sprintf(LCDTable3, "");
+
+        /*sprintf(LCDTable3, "    %02d:%02d:%02d    ", hour, minute, sec);*/
+        //strcpy(LCDTable2, strcat("剩余车位：", (unsigned char) park_space));
+        /*sprintf(LCDTable2, "剩余车位：%d    ", park_space);
+
+        /*sprintf(LCDTable4, "By sususweet");*/
+        /*strcpy(LCDTable3,nowTimeStr);
+        strcpy(LCDTable4,"By sususweet");*/
+    }else if (working_stage == PARK_OUT){
+        strcpy(LCDTable4, "    一路顺风    ");
+    }else{
+        sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+    }
+
+
 }
 
 void opr_key(unsigned int key_code) {
@@ -393,7 +437,7 @@ void opr_key(unsigned int key_code) {
             park_out(2);
             break;
         }
-        case 4: {
+        case 12: {
             switch (motor_stage){
                 case MOTOR_CLOSED:{
                     motor_stage = MOTOR_OPENING;
@@ -431,6 +475,9 @@ void writeCom_12864(uchar com) {
     EN_LCD = 1;
     _nop_();
     _nop_();
+    _nop_();
+    _nop_();
+    _nop_();
     //delay_us(50);    //50us使能延时!!!注意这里，如果是较快的CPU应该延时久一些
     EN_LCD = 0;
 }
@@ -461,36 +508,7 @@ void writeData_12864(uchar dat) {
 }
 */
 
-void waiting() {
-    unsigned int park_space = getSpaceNum();
-    if(working_stage == NORMAL){
-	sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
-        strcpy(LCDTable1,"    欢迎使用    ");
-        if (park_space <= 0){
-            sprintf(LCDTable2, "    车位已满    ", park_space);
-        }else{
-            sprintf(LCDTable2, "剩余车位：%d     ", park_space);
-        }
 
-        sprintf(LCDTable3, "                ");
-        //sprintf(LCDTable3, "");
-
-        /*sprintf(LCDTable3, "    %02d:%02d:%02d    ", hour, minute, sec);*/
-        //strcpy(LCDTable2, strcat("剩余车位：", (unsigned char) park_space));
-        /*sprintf(LCDTable2, "剩余车位：%d    ", park_space);
-
-        /*sprintf(LCDTable4, "By sususweet");*/
-        /*strcpy(LCDTable3,nowTimeStr);
-        strcpy(LCDTable4,"By sususweet");*/
-    }
-	if (motor_stage==MOTOR_BUSY){
-        sprintf(LCDTable3, "开启道闸注意安全");
-        twinkle_row[2] = 0;
-    }else{
-        sprintf(LCDTable3, "                ");
-    }
-
-}
 
 void init_LCD(void) {
     RST_LCD = 0;
@@ -525,7 +543,9 @@ void displayLCD(void) {
             writeData_12864(LCDTable1[i]);
         }
     }
-    delay_us(10);
+    _nop_();
+    _nop_();
+
     writeCom_12864(0x90);
     for(i = 0; i < 16; i++){
         if(twinkle_row[1] == 1){
@@ -538,7 +558,9 @@ void displayLCD(void) {
             writeData_12864(LCDTable2[i]);
         }
     }
-    delay_us(10);
+    _nop_();
+    _nop_();
+
     writeCom_12864(0x88);
     for (i = 0; i < 16; i++) {
         if(twinkle_row[2] == 1){
@@ -551,7 +573,8 @@ void displayLCD(void) {
             writeData_12864(LCDTable3[i]);
         }
     }
-    delay_us(10);
+    _nop_();
+    _nop_();
     writeCom_12864(0x98);
     for (i = 0; i < 16; i++) {
         if(twinkle_row[3] == 1){
@@ -564,9 +587,11 @@ void displayLCD(void) {
             writeData_12864(LCDTable4[i]);
         }
     }
-    delay_us(10);
+    _nop_();
+    _nop_();
     time++;
     /*LCD某些行闪烁时间控制*/
+    flag = ~flag;
     /*if (time >= TWINKLE_FREQ) {
         flag = ~flag;
         time = 0;
@@ -609,22 +634,30 @@ void init_timer0() {
 
 void interrupt0() {
     scan_key();
-    EA = 0;
-    startMotor(motor_stage);
-    EA = 1;
+
+
+
     return;
 }
 
 void int0() interrupt 1{
+    static unsigned int time_num = 0, disp_num = 0, motor_num = 0;
     time_num++;
     disp_num++;
     info_num++;
+    motor_num++;
 
     if (time_num >= TIME_FREQ) {
         time_num = 0;
         time_inc();
         nowTime++;
     }
+
+    if (motor_num >= MOTOR_FREQ) {
+        startMotor(motor_stage);
+        motor_num = 0;
+    }
+
 
     if (disp_num >= DISP_FREQ) {
         waiting();
