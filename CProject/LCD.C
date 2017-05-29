@@ -96,7 +96,7 @@ void send_char(unsigned char txd) {
 }
 
 void send_int(unsigned int txd){
-    send_char(txd/10*16+txd%10);
+    send_char((unsigned char) (txd / 10 * 16 + txd % 10));
 }
 
 void clr_twinkle(){
@@ -442,6 +442,7 @@ void send_str(unsigned int carID, unsigned int startTime, unsigned int endTime) 
 
 
 void park_in(unsigned int id){
+    clr_twinkle();
     if(car_wide > MAX_CAR_WIDE){
         strcpy(LCDTable1,"    欢迎光临    ");
         sprintf(LCDTable2, "车牌号:%03d", car_id);
@@ -464,8 +465,6 @@ void park_in(unsigned int id){
 
 void park_out(unsigned int id){
     unsigned int park_hours,park_minutes,park_seconds;
-    /*unsigned char end_hours,end_minutes,end_seconds;
-    unsigned char start_hours,start_minutes,start_seconds;*/
     clr_twinkle();
 
     if (parkSpace[id].used == 1){
@@ -477,12 +476,6 @@ void park_out(unsigned int id){
         sprintf(LCDTable1, "车牌号:%03d", parkSpace[id].carID);
         sprintf(LCDTable2, "  应付费：%1.2f  ",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5));
         sprintf(LCDTable3, "停车时间%02d:%02d:%02d", park_hours, park_minutes, park_seconds);
-        /*end_hours = time_hours(parkSpace[id].endTime);
-        end_minutes = time_minutes(parkSpace[id].endTime);
-        end_seconds = time_seconds(parkSpace[id].endTime);
-        start_hours = time_hours(parkSpace[id].startTime);
-        start_minutes = time_minutes(parkSpace[id].startTime);
-        start_seconds = time_seconds(parkSpace[id].startTime);       */
         send_str(parkSpace[id].carID,  parkSpace[id].startTime, parkSpace[id].endTime);
     }else{
         strcpy(LCDTable1,"    欢迎使用    ");
@@ -764,8 +757,8 @@ unsigned char readADC(void){
     _nop_();
     AD_RD = 0;
     _nop_();
-    //_nop_();
-    delay_us(1);
+    _nop_();
+    //delay_us(1);
     output = AD_INPUT;
     _nop_();
     AD_RD = 1;
@@ -794,7 +787,6 @@ int main(void) {
 void interrupt0() {
     scan_key();
     scan_emergency();
-    car_wide = readADC();
     return;
 }
 
@@ -820,6 +812,7 @@ void int0() interrupt 1{
     if (disp_num >= DISP_FREQ) {
         waiting();
         displayLCD();
+        car_wide = readADC();
         disp_num = 0;
     }
 
