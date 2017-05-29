@@ -43,6 +43,7 @@ sbit AD_RD=P3^7;
 #define MAX_SPACE 3
 #define TWINKLE_ROW_NUM 4
 #define MAX_CAR_WIDE 0x99   /*车宽阈值3V*/
+#define MAX_KEY_CODE 16
 
 typedef unsigned char uchar;
 typedef struct {
@@ -81,8 +82,8 @@ ParkInfo idata parkSpace[MAX_SPACE];
 
 void time_inc();
 void opr_key(unsigned int key_code);
-unsigned int press_key();
-unsigned int read_key();
+uchar press_key();
+uchar read_key();
 void send_char(unsigned char txd);
 unsigned char readADC(void);
 void startADC(void);
@@ -217,7 +218,7 @@ unsigned int time_seconds(unsigned int endTime){
 void scan_key() {
     static int key_state = KEY_STATE_RELEASE;   /*状态机状态初始化，采用static保存状态*/
     unsigned int wait_time = KEY_WAIT;   /*按键扫描等待时间*/
-    static int key_code = -1;
+    static uchar key_code = MAX_KEY_CODE;
     unsigned int pressed = press_key(); /*press_key为检测是否有按键按下的函数*/
     static scan_time = 0;
     switch (key_state) {
@@ -242,10 +243,10 @@ void scan_key() {
             break;
         }
         case KEY_STATE_PRESSED: {   /*若按键被确认按下，则等待按键松开再进行操作*/
-            if (pressed == 0 && key_code >= 0) {
-                opr_key((unsigned int) key_code);  /*opr_key为按键事件响应函数*/
+            if (pressed == 0) {
+                opr_key(key_code);  /*opr_key为按键事件响应函数*/
                 key_state = KEY_STATE_RELEASE;
-                key_code = -1;
+                key_code = MAX_KEY_CODE;
             }
             break;
         }
@@ -255,7 +256,7 @@ void scan_key() {
 }
 
 //判断是否有键按下
-unsigned int press_key() {
+uchar press_key() {
     unsigned char temp_line, temp_row;
     KEYBOARD = 0xF0;
     temp_line = KEYBOARD;
@@ -268,9 +269,9 @@ unsigned int press_key() {
 }
 
 //扫描键盘，返回键值
-unsigned int read_key() {
-    unsigned char temp_column, temp_row;
-    unsigned int row, column, key_code;
+uchar read_key() {
+    uchar temp_column, temp_row;
+    uchar row, column, key_code;
     KEYBOARD = 0xF0;
     temp_column = KEYBOARD;
 
@@ -442,13 +443,19 @@ void send_str(unsigned int carID, unsigned int startTime, unsigned int endTime) 
 
 
 void park_in(unsigned int id){
-    unsigned char car_wide;
+    unsigned char car_wide, car_wide2;
     clr_twinkle();
+
     car_wide = readADC();
+    car_wide2 = readADC();
+    while(car_wide2 != car_wide){
+        car_wide = readADC();
+        car_wide2 = readADC();
+    }
 
     if(car_wide > MAX_CAR_WIDE){
         strcpy(LCDTable1,"    欢迎光临    ");
-        sprintf(LCDTable2, "车牌号：浙A%04c", car_id);
+        sprintf(LCDTable2, "车牌号:%03d", car_id);
         strcpy(LCDTable3, "    车宽超限    ");
         twinkle_row[2] = 1;
     }else{
@@ -456,10 +463,10 @@ void park_in(unsigned int id){
         parkSpace[id].carID = car_id;
         parkSpace[id].used = 1;
         strcpy(LCDTable1,"    欢迎光临    ");
-        sprintf(LCDTable2, "车牌号ID:%04d", parkSpace[id].carID);
+        sprintf(LCDTable2, "车牌号:%03d", parkSpace[id].carID);
         sprintf(LCDTable3, "车位:%d  开始计费",id + 1);
         car_id++;
-        ///sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+        //sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
     }
     working_stage = PARK_IN;
     info_num = 0;
@@ -478,7 +485,7 @@ void park_out(unsigned int id){
         park_hours = time_hours(parkSpace[id].endTime-parkSpace[id].startTime);
         park_minutes = time_minutes(parkSpace[id].endTime-parkSpace[id].startTime);
         park_seconds = time_seconds(parkSpace[id].endTime-parkSpace[id].startTime);
-        sprintf(LCDTable1, "车牌号ID:%04d", parkSpace[id].carID);
+        sprintf(LCDTable1, "车牌号:%03d", parkSpace[id].carID);
         sprintf(LCDTable2, "  应付费：%1.2f  ",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5));
         sprintf(LCDTable3, "停车时间%02d:%02d:%02d", park_hours, park_minutes, park_seconds);
         /*end_hours = time_hours(parkSpace[id].endTime);
@@ -512,7 +519,7 @@ void waiting() {
         }else{
             sprintf(LCDTable2, "剩余车位：%d     ", park_space);
         }
-        if (motor_stage==MOTOR_BUSY){
+        if (motor_stage == MOTOR_BUSY){
             sprintf(LCDTable3, "道闸工作注意安全");
             twinkle_row[2] = 1;
         }else{
@@ -597,6 +604,10 @@ void writeCom_12864(uchar com) {
     RW_LCD = 0;
     DATA_LCD = com;
     EN_LCD = 1;
+    _nop_();
+    _nop_();
+    _nop_();
+    _nop_();
     _nop_();
     _nop_();
 
@@ -760,7 +771,7 @@ unsigned char readADC(void){
     AD_RD = 1;
     _nop_();
     AD_WR = 1;
-    init_LCD();
+    //init_LCD();
     return output;
 }
 
