@@ -20,17 +20,14 @@ sbit RST_LCD = P2^5;
 #define KEYBOARD P1
 /*注意，motor只能使用P0的低四位，同时在操作motor时记得关液晶屏的EN*/
 #define MOTOR P0
-/*注意，读取AD转换器数据时，记得关液晶显示EN*/
-
 //定义ADC的连接端口
 #define AD_INPUT P0
+/*注意，读取AD转换器数据时，记得关液晶显示EN*/
+
 sbit AD_WR=P3^6;
 sbit AD_RD=P3^7;
 
-/*定时器0 2ms*//*
-#define TIMER0_TH 0xF8
-#define TIMER0_TL 0x30*/
-
+/*定时器0 2ms*/
 #define TIMER0_TH 0xF8
 #define TIMER0_TL 0x30
 #define TWINKLE_FREQ 2    /*LCD闪烁周期*/
@@ -63,6 +60,9 @@ enum working_state {
 enum motor_state {
     MOTOR_CLOSING, MOTOR_CLOSED, MOTOR_OPENING, MOTOR_OPENED, MOTOR_BUSY
 };
+enum return_type {
+    SECOND, MINUTE, HOUR
+};
 
 /*四相双四拍*/
 uchar code FFW[8]={0xf3,0xf9,0xfc,0xf6};
@@ -76,16 +76,18 @@ uchar motor_stage = MOTOR_CLOSED;
 uchar motor_cache = MOTOR_BUSY;
 unsigned int nowTime = 0, info_num = 0;
 unsigned int sec = 0, minute = 0, hour = 0;
+uchar sec_begin, minute_begin, hour_begin;
 unsigned char car_wide;
-
+unsigned int time_num = 0;
+unsigned char motor_num = 0, disp_num = 0;
 
 ParkInfo idata parkSpace[MAX_SPACE];
 
 void time_inc();
-void opr_key(unsigned int key_code);
+void opr_key(uchar key_code);
 uchar press_key();
 uchar read_key();
-void send_char(unsigned char txd);
+void send_char(uchar txd);
 void startADC(void);
 
 /*基础函数库开始*/
@@ -100,7 +102,7 @@ void send_int(unsigned int txd){
 }
 
 void clr_twinkle(){
-    unsigned int i;
+    unsigned char i;
     for (i = 0; i < TWINKLE_ROW_NUM; i++){
         twinkle_row[i] = 0;
     }
@@ -140,10 +142,10 @@ void time_inc() {
     return;
 }
 
-uchar time_plus_hour(unsigned int timeStamp){
-    uchar hour = atoi(strcat(&TimeStr[0], &TimeStr[1]));
-    uchar minute = atoi(strcat(&TimeStr[3], &TimeStr[4]));
-    uchar sec = atoi(strcat(&TimeStr[6], &TimeStr[7]));
+uchar time_plus(unsigned int timeStamp, uchar type){
+    uchar hour = hour_begin;
+    uchar minute = minute_begin;
+    uchar sec = sec_begin;
     sec += timeStamp;
     while(sec>=60){
         sec -= 60;
@@ -153,50 +155,28 @@ uchar time_plus_hour(unsigned int timeStamp){
         minute -=60;
         hour++;
     }
-    return hour;
+    switch (type){
+        case SECOND:{
+            return sec;
+        }
+        case MINUTE:{
+            return minute;
+        }
+        case HOUR:{
+            return hour;
+        }
+        default:break;
+    }
 }
 
-uchar time_plus_minute(unsigned int timeStamp){
-    uchar hour = atoi(strcat(&TimeStr[0], &TimeStr[1]));
-    uchar minute = atoi(strcat(&TimeStr[3], &TimeStr[4]));
-    uchar sec = atoi(strcat(&TimeStr[6], &TimeStr[7]));
-    sec += timeStamp;
-    while(sec>=60){
-        sec -= 60;
-        minute ++;
-    }
-    while(minute>=60){
-        minute -=60;
-        hour++;
-    }
-    return minute;
-}
-
-uchar time_plus_second(unsigned int timeStamp){
-    uchar hour = atoi(strcat(&TimeStr[0], &TimeStr[1]));
-    uchar minute = atoi(strcat(&TimeStr[3], &TimeStr[4]));
-    uchar sec = atoi(strcat(&TimeStr[6], &TimeStr[7]));
-    sec += timeStamp;
-    while(sec>=60){
-        sec -= 60;
-        minute ++;
-    }
-    while(minute>=60){
-        minute -=60;
-        hour++;
-    }
-    return sec;
-}
-
-
-unsigned int time_hours(unsigned int endTime){
+unsigned int time_diff_hours(unsigned int endTime){
     unsigned int diff_hours;
     unsigned int seconds = endTime;
     diff_hours= (uchar) (seconds / 3600);
     return diff_hours;
 }
 
-unsigned int time_minutes(unsigned int endTime){
+unsigned int time_diff_minutes(unsigned int endTime){
     unsigned int diff_minutes;
     unsigned int seconds = endTime;
     seconds %= 3600 ;
@@ -204,7 +184,7 @@ unsigned int time_minutes(unsigned int endTime){
     return diff_minutes;
 }
 
-unsigned int time_seconds(unsigned int endTime){
+unsigned int time_diff_seconds(unsigned int endTime){
     unsigned int diff_seconds;
     unsigned int seconds = endTime;
     seconds %= 3600 ;
@@ -214,10 +194,9 @@ unsigned int time_seconds(unsigned int endTime){
 
 void scan_key() {
     static uchar key_state = KEY_STATE_RELEASE;   /*状态机状态初始化，采用static保存状态*/
-    unsigned int wait_time = KEY_WAIT;   /*按键扫描等待时间*/
     static uchar key_code = MAX_KEY_CODE;
-    unsigned int pressed = press_key(); /*press_key为检测是否有按键按下的函数*/
-    static scan_time = 0;
+    uchar pressed = press_key(); /*press_key为检测是否有按键按下的函数*/
+    static uchar scan_time = 0;
     switch (key_state) {
         case KEY_STATE_RELEASE: {   /*若原始状态为无按键按下RELEASE，同时又检测到按键按下，则状态转换到WAITING*/
             if (pressed == 1) {
@@ -228,7 +207,7 @@ void scan_key() {
         case KEY_STATE_WAITING: {   /*原始状态为WAITING，对按键进行多次判断*/
             if (pressed) {
                 scan_time++;
-                if (scan_time >= wait_time) {   /*若按键按下的时间超过一定时间，则认为按键按下，读按键*/
+                if (scan_time >= KEY_WAIT) {   /*若按键按下的时间超过一定时间，则认为按键按下，读按键*/
                     key_state = KEY_STATE_PRESSED;
                     scan_time = 0;
                     key_code = read_key();  /*read_key为读按键的函数*/
@@ -254,7 +233,7 @@ void scan_key() {
 
 //判断是否有键按下
 uchar press_key() {
-    unsigned char temp_line, temp_row;
+    uchar temp_line, temp_row;
     KEYBOARD = 0xF0;
     temp_line = KEYBOARD;
     if (temp_line == 0xF0) return 0;
@@ -320,7 +299,7 @@ uchar read_key() {
         default:
             break;
     }
-    key_code = 4 * row + column;
+    key_code = (uchar) (4 * row + column);
     return key_code;
 }
 
@@ -348,7 +327,7 @@ void scan_emergency(){
 
 /* 根据当前状态全局变量给电机提供驱动脉冲 */
 void startMotor(uchar type){
-    static unsigned char motor_index = 0, motor_count = 0;
+    static uchar motor_index = 0, motor_count = 0;
     switch (type){
         case MOTOR_CLOSING:{
             motor_cache = MOTOR_CLOSED;
@@ -383,7 +362,7 @@ void startMotor(uchar type){
     if (motor_index >= 4) {
         motor_index = 0;
         motor_count++;
-        if(motor_count>=60) {
+        if(motor_count >= 60) {
             motor_stage = motor_cache;
             motor_count = 0;
         }
@@ -391,12 +370,12 @@ void startMotor(uchar type){
 }
 
 /*获取剩余空间*/
-int getSpace() {
+unsigned int getSpace() {
     unsigned int i = 0;
     for (i = 0; i < MAX_SPACE; i++) {
         if (parkSpace[i].used == 0) return i;
     }
-    return -1;
+    return MAX_SPACE;
 }
 
 /*获取剩余空间数目*/
@@ -410,24 +389,21 @@ unsigned int getSpaceNum() {
 
 // 传送字串
 void send_str(unsigned int carID, unsigned int startTime, unsigned int endTime) {
-    //unsigned char i = 0;
-    //printf("00-浙A%04d-进入时间（%02d:%02d:%02d）-离开时间（%02d:%02d:%02d）-00", carID, time_hours(startTime), time_minutes(startTime), time_seconds(startTime), time_hours(endTime), time_minutes(endTime), time_seconds(endTime));
-
     send_char(00);
     //send_char('-');
-    send_int((unsigned char) carID);
+    send_int(carID);
     //send_char('-');
-    send_int(time_plus_hour(startTime));
+    send_int(time_plus(startTime,HOUR));
     //send_char(':');
-    send_int(time_plus_minute(startTime));
+    send_int(time_plus(startTime,MINUTE));
     // send_char(':');
-    send_int(time_plus_second(startTime));
+    send_int(time_plus(startTime,SECOND));
     // send_char('-');
-    send_int(time_plus_hour(endTime));
+    send_int(time_plus(endTime,HOUR));
     //send_char(':');
-    send_int(time_plus_minute(endTime));
+    send_int(time_plus(endTime,MINUTE));
     // send_char(':');
-    send_int(time_plus_second(endTime));
+    send_int(time_plus(endTime,SECOND));
     //send_char('-');
     send_char(00);
 
@@ -446,7 +422,7 @@ void park_in(unsigned int id){
     if(car_wide > MAX_CAR_WIDE){
         strcpy(LCDTable1,"    欢迎光临    ");
         sprintf(LCDTable2, "车牌号:%03d", car_id);
-        strcpy(LCDTable3, "车宽超限");
+        strcpy(LCDTable3, "车宽超限        ");
         twinkle_row[2] = 1;
     }else{
         parkSpace[id].startTime = nowTime;
@@ -470,9 +446,9 @@ void park_out(unsigned int id){
     if (parkSpace[id].used == 1){
         parkSpace[id].endTime = nowTime;
         parkSpace[id].used = 0;
-        park_hours = time_hours(parkSpace[id].endTime-parkSpace[id].startTime);
-        park_minutes = time_minutes(parkSpace[id].endTime-parkSpace[id].startTime);
-        park_seconds = time_seconds(parkSpace[id].endTime-parkSpace[id].startTime);
+        park_hours = time_diff_hours(parkSpace[id].endTime - parkSpace[id].startTime);
+        park_minutes = time_diff_minutes(parkSpace[id].endTime - parkSpace[id].startTime);
+        park_seconds = time_diff_seconds(parkSpace[id].endTime - parkSpace[id].startTime);
         sprintf(LCDTable1, "车牌号:%03d", parkSpace[id].carID);
         sprintf(LCDTable2, "  应付费：%1.2f  ",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5));
         sprintf(LCDTable3, "停车时间%02d:%02d:%02d", park_hours, park_minutes, park_seconds);
@@ -515,16 +491,16 @@ void waiting() {
     }else{
         sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
     }
-
+    return;
 }
 
-void opr_key(unsigned int key_code) {
+void opr_key(uchar key_code) {
     switch (key_code) {
         case 0: {
             if (working_stage == NORMAL){
-                int space_id = getSpace();
-                if (space_id != -1){
-                    park_in((unsigned int) space_id);
+                unsigned int space_id = getSpace();
+                if (space_id != MAX_SPACE){
+                    park_in(space_id);
                 }
             }
             break;
@@ -581,7 +557,7 @@ void opr_key(unsigned int key_code) {
 
 //忙检测，若忙则等待，最长等待时间为60ms
 void busyCheck_12864(void) {
-    unsigned int timeout = 0;
+    uchar timeout = 0;
     DATA_LCD = 0xff;
     RS_LCD = 0;
     RW_LCD = 1;
@@ -639,7 +615,7 @@ void init_LCD(void) {
 }
 
 void displayLCD(void) {
-    static unsigned int time = 0, flag = 0;
+    static uchar time = 0, flag = 0;
     unsigned int i;
     writeCom_12864(0x01);   //清屏，并且DDRAM数据指针清零
     //delay_us(10);
@@ -702,8 +678,8 @@ void displayLCD(void) {
     _nop_();
     _nop_();
     time++;
-    /*LCD某些行闪烁时间控制*/
 
+    /*LCD某些行闪烁时间控制*/
     if (time >= TWINKLE_FREQ) {
         flag = ~flag;
         time = 0;
@@ -711,7 +687,7 @@ void displayLCD(void) {
 }
 
 void init_settings() {
-    unsigned int i = 0;
+    uchar i = 0;
     for (i = 0; i < MAX_SPACE; i++) {
         ParkInfo parkInfo;
         parkInfo.used = 0;
@@ -720,6 +696,9 @@ void init_settings() {
     hour = atoi(strcat(&TimeStr[0], &TimeStr[1]));
     minute = atoi(strcat(&TimeStr[3], &TimeStr[4]));
     sec = atoi(strcat(&TimeStr[6], &TimeStr[7]));
+    hour_begin = atoi(strcat(&TimeStr[0], &TimeStr[1]));
+    minute_begin = atoi(strcat(&TimeStr[3], &TimeStr[4]));
+    sec_begin = atoi(strcat(&TimeStr[6], &TimeStr[7]));
 }
 
 void init_timer0() {
@@ -764,11 +743,10 @@ unsigned char readADC(void){
     AD_RD = 1;
     _nop_();
     AD_WR = 1;
-    //init_LCD();
     return output;
 }
 
-int main(void) {
+void main(void) {
     init_settings();
     init_LCD();
 
@@ -781,7 +759,7 @@ int main(void) {
     while (1) {
 
     }
-    return 0;
+    return;
 }
 
 void interrupt0() {
@@ -791,8 +769,6 @@ void interrupt0() {
 }
 
 void int0() interrupt 1{
-    static unsigned int time_num = 0;
-    static unsigned char motor_num = 0, disp_num = 0;
     time_num++;
     disp_num++;
     info_num++;
@@ -802,6 +778,8 @@ void int0() interrupt 1{
         time_num = 0;
         time_inc();
         nowTime++;
+        /*掉电保护*/
+        writeCom_12864(0x0C);
     }
 
     if (motor_num >= MOTOR_FREQ) {
