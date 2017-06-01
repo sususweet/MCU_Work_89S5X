@@ -1,0 +1,6 @@
+"air.obj",
+"I2C.obj",
+"KEY_OPERATE.obj",
+"LCD12864.obj" 
+TO "air_conditonal" 
+RAMSIZE(256) 

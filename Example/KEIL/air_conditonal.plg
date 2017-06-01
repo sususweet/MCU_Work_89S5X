@@ -1,0 +1,24 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Project:</h2>
+C:\Users\Administrator\Desktop\KEIL\air_conditonal.uvproj
+Project File Date:  06/09/2016
+
+<h2>Output:</h2>
+Build target 'Target 1'
+compiling air.c...
+AIR.C(290): warning C206: 'DELAY': missing function-prototype
+AIR.C(248): warning C280: 'change': unreferenced local variable
+AIR.C(368): warning C280: 'str': unreferenced local variable
+compiling I2C.c...
+compiling KEY_OPERATE.c...
+compiling LCD12864.c...
+LCD12864.C(57): warning C280: 'x': unreferenced local variable
+linking...
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?_LCDLINECLEAR?LCD12864
+Program Size: data=108.3 xdata=0 code=3901
+creating hex file from "air_conditonal"...
+"air_conditonal" - 0 Error(s), 5 Warning(s).
