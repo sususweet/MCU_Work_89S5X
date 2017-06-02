@@ -79,6 +79,13 @@ uchar code FFW[4]={0xf3,0xf9,0xfc,0xf6};
 uchar code REV[4]={0xf3,0xf6,0xfc,0xf9};
 uchar code TimeStr[] = __TIME__;
 uchar code LCDRows[] = {0x80,0x90,0x88,0x98};
+uchar code display_twinkle[4][16]={
+{"车位已满"},
+{"车位没有车辆"},
+{"注意安全"},
+{"车宽超限"}
+};
+
 uchar code display_welcome[2][16]={
 {"欢迎光临"},
 {"一路顺风"}
@@ -101,7 +108,9 @@ uchar code display_park_info[5][16]={
 uchar displayCache[9];
 //uchar idata twinkleCache[4];
 //uchar code LCDTable1[16], LCDTable2[16], LCDTable3[16], LCDTable4[16];
-uchar idata twinkle_row[TWINKLE_ROW_NUM] = {0, 0, 0, 0};
+/*uchar idata twinkle_row[TWINKLE_ROW_NUM] = {0, 0, 0, 0};*/
+uchar twinkle_row, twinkleIndex;
+
 unsigned int car_id = 1;
 uchar working_stage = NORMAL;
 uchar motor_stage = MOTOR_CLOSED;
@@ -126,6 +135,7 @@ uchar getLCDMiddleByStr (uchar *str, uchar address);
 uchar displayLCDRow(uchar *str, uchar address);
 void displayLCDRowMiddle(uchar *str, uchar address);
 void LcdFullClear();
+void startLineTwinkle(uchar* str, uchar index);
 
 /*基础函数库开始*/
 void send_char(unsigned char txd) {
@@ -136,14 +146,6 @@ void send_char(unsigned char txd) {
 
 void send_int(unsigned int txd){
     send_char((unsigned char) (txd / 10 * 16 + txd % 10));
-}
-
-void clr_twinkle(){
-    unsigned char i;
-    for (i = 0; i < TWINKLE_ROW_NUM; i++){
-        twinkle_row[i] = 0;
-    }
-    return;
 }
 
 void delay_us(unsigned int us) {
@@ -496,10 +498,13 @@ void park_in(unsigned int id){
 
     if(car_wide > MAX_CAR_WIDE){
         /*车宽超限提醒*/
-        displayLCDRowMiddle(display_park_info[4],LCDRows[2]);
+        /*twinkleIndex = 3;
+        twinkle_row = 2;*/
+        //startLineTwinkle(display_park_info[4], 2);
+        displayLCDRowMiddle(display_park_info[4], LCDRows[2]);
         //strcpy(LCDTable3, "车宽超限        ");
         //strcpy(twinkleCache, display_park_info[4]);
-        twinkle_row[2] = 1;
+        //twinkle_row[2] = 1;
     }else{
         parkSpace[id].startTime = nowTime;
         parkSpace[id].carID = car_id;
@@ -581,8 +586,9 @@ void park_out(unsigned int id){
         displayLCDRowMiddle(display_welcome[0],LCDRows[0]);
 
         /*车位没有车辆提醒*/
+        //startLineTwinkle(display_space[2], 1);
         displayLCDRowMiddle(display_space[2],LCDRows[1]);
-        twinkle_row[1] = 1;
+        //twinkle_row[1] = 1;
         working_stage = PARK_OUT_EMPTY;
         //strcpy(twinkleCache, display_space[2]);
     }
@@ -601,8 +607,10 @@ void waiting() {
 
         if (park_space <= 0) {
             displayLCDRowMiddle(display_space[0],LCDRows[1]);
+            //startLineTwinkle(display_space[0], 1);
+            /*displayLCDRowMiddle(display_space[0],LCDRows[1]);
             //strcpy(twinkleCache, display_space[0]);
-            twinkle_row[1] = 1;
+            twinkle_row[1] = 1;*/
         } else {
             address_cache = displayLCDRow(display_space[1],LCDRows[1]);
             sprintf((char *) displayCache, "%d", park_space);
@@ -616,7 +624,13 @@ void waiting() {
         }
         if (motor_stage == MOTOR_BUSY) {
             displayLCDRowMiddle(display_space[3],LCDRows[2]);
-            twinkle_row[2] = 1;
+
+           // twinkleIndex = 2;
+            //twinkle_row = 2;
+
+            //startLineTwinkle(display_space[3], 2);
+           /* displayLCDRowMiddle(display_space[3],LCDRows[2]);
+            twinkle_row[2] = 1;*/
         }
     }else if (working_stage != PARK_OUT){
         disp_time();
@@ -635,19 +649,19 @@ void opr_key(uchar key_code) {
             break;
         }
         case 1: {
-            if (working_stage == NORMAL) {
+            if (working_stage == NORMAL){
                 park_out(0);
             }
             break;
         }
         case 2: {
-            if (working_stage == NORMAL) {
+            if (working_stage == NORMAL){
                 park_out(1);
             }
             break;
         }
         case 3: {
-            if (working_stage == NORMAL) {
+            if (working_stage == NORMAL){
                 park_out(2);
             }
             break;
@@ -755,49 +769,59 @@ void LCDLineClear(unsigned char line) {
     }
 }
 
+void clr_twinkle(){
+    twinkle_row = TWINKLE_ROW_NUM;
+    return;
+}
+
 void LcdFullClear() {
     writeCom_12864(0x01);
     clr_twinkle();
 }
-
-/*void LCDLineTwinkle() {
-    static uchar index = 0;
-    static bit flag = 0;
-    for (index = 0; index < 4;index++){
-        if(twinkle_row[index] == 1){
-            if (flag == 0) {
-                displayLCDRowMiddle(twinkleCache,LCDRows[index]);
-            } else {
-                LCDLineClear(index);
-            }
-            flag = ~flag;
-            break;
-        }
-
-    }
+/*void startLineTwinkle(uchar* str, uchar index) {
+    sprintf(displayCache, str);
+    twinkle_row = index;
+    return;
 }*/
-/*
-//反白，X值为0－7，Y值为0－3，width为行反白格数
-void photodisplay(uchar x,uchar y,uchar width) {
-    uchar i,j,flag=0x00;
-    if(y>1) {
-        flag=0x08;
-        y=y-2;
+void LCDLineTwinkle() {
+    static bit flag = 0;
+    static uchar time = 0;
+    if (twinkle_row == TWINKLE_ROW_NUM) return;
+    if (flag == 0) {
+        displayLCDRowMiddle(display_twinkle[twinkleIndex],LCDRows[twinkle_row]);
+    } else {
+        LCDLineClear(twinkle_row);
     }
-    writeCom_12864(0x34); //写数据时,关闭图形显示,且打开扩展指令集
-    for(i=0;i<16;i++) {
-        writeCom_12864(0x80+(y<<4)+i);
-        writeCom_12864(0x80+flag+x);
-        for(j=0;j<width;j++) {
-            writeData_12864(0xff);
-            writeData_12864(0xff);
-        }
-        delay_us(1);
+    time++;
+
+    /*LCD某些行闪烁时间控制*/
+    if (time >= TWINKLE_FREQ) {
+        flag = ~flag;
+        time = 0;
     }
-    writeCom_12864(0x36); //写完数据,开图形显示
-    writeCom_12864(0x30); //从扩展指令到基本指令
 }
-*/
+   /*
+   //反白，X值为0－7，Y值为0－3，width为行反白格数
+   void photodisplay(uchar x,uchar y,uchar width) {
+       uchar i,j,flag=0x00;
+       if(y>1) {
+           flag=0x08;
+           y=y-2;
+       }
+       writeCom_12864(0x34); //写数据时,关闭图形显示,且打开扩展指令集
+       for(i=0;i<16;i++) {
+           writeCom_12864(0x80+(y<<4)+i);
+           writeCom_12864(0x80+flag+x);
+           for(j=0;j<width;j++) {
+               writeData_12864(0xff);
+               writeData_12864(0xff);
+           }
+           delay_us(1);
+       }
+       writeCom_12864(0x36); //写完数据,开图形显示
+       writeCom_12864(0x30); //从扩展指令到基本指令
+   }
+   */
 
 /*void LCDLineClear(unsigned char x) {
     unsigned char len=16;
@@ -1094,7 +1118,8 @@ void storeData(){
     write_byte(1, minute);
     write_byte(2, sec);
     write_int(3, nowTime);
-    j = 5;
+    write_int(5, car_id);
+    j = 7;
     for (i = 0; i < MAX_SPACE; i++) {
         write_int(j, parkSpace[i].startTime);
         j+=2;
@@ -1115,7 +1140,9 @@ void recoverData(){
     minute = read_random(1);
     sec = read_random(2);*/
     nowTime = read_random_int(3);
-    j = 5;
+    car_id = read_random_int(5);
+
+    j = 7;
     for (i = 0; i < MAX_SPACE; i++) {
         parkSpace[i].startTime = read_random_int(j);
         j+=2;
@@ -1146,19 +1173,11 @@ void int0() interrupt 1{
             writeCom_12864(0x0C);
             car_wide = readADC();
         }
-        //
-
         //write_byte(3,222);
         //read_random(55);
         /*SCL = 0;
         write_byte(3,222);
         read_random(55); //读取单片机复位次数*/
-
-    }
-
-    if (motor_num >= MOTOR_FREQ) {
-        startMotor(motor_stage);
-        motor_num = 0;
     }
 
     if (disp_num >= DISP_FREQ) {
@@ -1167,6 +1186,12 @@ void int0() interrupt 1{
         //car_wide = readADC();
         disp_num = 0;
     }
+
+    if (motor_num >= MOTOR_FREQ) {
+        startMotor(motor_stage);
+        motor_num = 0;
+    }
+
 
     if (info_num >= INFO_SHOW_FREQ) {
         working_stage = NORMAL;
@@ -1184,7 +1209,6 @@ void main() {
     init_settings();
     recoverData();
     init_LCD();
-
     TMOD = 0x21;
     EA = 1;
 
