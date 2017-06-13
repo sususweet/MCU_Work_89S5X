@@ -9,6 +9,7 @@ void delay_us(unsigned int us);
 void delay_ms(unsigned int ms);
 void initSend();
 
+/*开始AD转换*/
 void startADC(void){
     AD_WR = 1;
     _nop_();
@@ -19,6 +20,7 @@ void startADC(void){
     AD_WR = 1;
 }
 
+/*读取AD转换数据*/
 unsigned char readADC(void){
     unsigned char output;
     AD_INPUT = 0xff;
@@ -49,17 +51,19 @@ int main(void){
     return 0;
 }
 
+/*串口中断初始化，定时器1初始化为波特率发生器，波特率为2400*/
 void initSend(){
     TMOD = 0x20;
     TH1 = 0xF3;
     TL1 = 0xF3;
     SCON = 0x50;
-    PCON &= 0xEF;
+    PCON &= 0x7F;
     TR1 = 1;
     EA = 1;
     ES = 1;
 }
 
+/*串行口发送字符*/
 void sInterrupt(){
     unsigned char tmp;
     TI = 0;

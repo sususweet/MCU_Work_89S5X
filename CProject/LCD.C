@@ -19,6 +19,11 @@ sbit EN_LCD = P2^2;
 sbit PSB_LCD = P2^3;
 sbit RST_LCD = P2^5;
 
+sbit AD_WR=P3^6;
+sbit AD_RD=P3^7;
+sbit RD_SDA=P3^3; //定义数据线
+sbit WR_SCL=P3^2; //定义时钟线
+
 #define KEYBOARD P1
 /*注意，motor只能使用P0的低四位，同时在操作motor时记得关液晶屏的EN*/
 #define MOTOR P0
@@ -30,10 +35,6 @@ sbit RST_LCD = P2^5;
 #define OP_WRITE 0xa0 // 器件地址以及写入操作
 #define OP_READ 0xa1 // 器件地址以及读取操作
 
-sbit AD_WR=P3^6;
-sbit AD_RD=P3^7;
-sbit SDA=P3^3; //定义数据线
-sbit SCL=P3^2; //定义时钟线
 
 /*定时器0 2ms*/
 #define TIMER0_TH 0xF8
@@ -65,7 +66,7 @@ enum key_states_e {
     KEY_STATE_PRESSED
 };
 enum working_state {
-    NORMAL, PARK_IN, PARK_OUT, PARK_OUT_EMPTY
+    NORMAL, PARK_IN, PARK_IN_NOVALID, PARK_OUT, PARK_OUT_EMPTY, PARK_IN_MOTOR, PARK_OUT_MOTOR
 };
 enum motor_state {
     MOTOR_CLOSING, MOTOR_CLOSED, MOTOR_OPENING, MOTOR_OPENED, MOTOR_BUSY
@@ -79,18 +80,21 @@ uchar code FFW[4]={0xf3,0xf9,0xfc,0xf6};
 uchar code REV[4]={0xf3,0xf6,0xfc,0xf9};
 uchar code TimeStr[] = __TIME__;
 uchar code LCDRows[] = {0x80,0x90,0x88,0x98};
-uchar code display_twinkle[4][16]={
+/*uchar code display_twinkle[4][16]={
 {"车位已满"},
 {"车位没有车辆"},
 {"注意安全"},
 {"车宽超限"}
-};
+};*/
 
-uchar code display_welcome[2][16]={
+uchar code display_welcome[5][16]={
 {"欢迎光临"},
-{"一路顺风"}
+{"一路顺风"},
+{"请您通行"},
+{"费用："},
+{"元/ 秒"}
 };
-uchar code display_space[4][16]={
+uchar code display_space[5][16]={
 {"车位已满"},
 {"剩余车位："},
 {"车位没有车辆"},
@@ -98,7 +102,7 @@ uchar code display_space[4][16]={
 };
 
 uchar code display_park_info[5][16]={
-{"车牌号："},
+{"车牌号：浙A "},
 {"车位："},
 {"应付费："},
 {"停车时间"},
@@ -107,23 +111,23 @@ uchar code display_park_info[5][16]={
 
 uchar displayCache[9];
 //uchar idata twinkleCache[4];
-//uchar code LCDTable1[16], LCDTable2[16], LCDTable3[16], LCDTable4[16];
-/*uchar idata twinkle_row[TWINKLE_ROW_NUM] = {0, 0, 0, 0};*/
-uchar twinkle_row, twinkleIndex;
+/*uchar twinkle_row, twinkleIndex;*/
 
 unsigned int car_id = 1;
 uchar working_stage = NORMAL;
 uchar motor_stage = MOTOR_CLOSED;
 uchar motor_cache = MOTOR_BUSY;
 unsigned int nowTime = 0, info_num = 0;
-unsigned char sec = 0, minute = 0, hour = 0;
+uchar sec = 0, minute = 0, hour = 0;
 uchar sec_begin, minute_begin, hour_begin;
 uchar car_wide;
 unsigned int time_num = 0;
-uchar motor_num = 0, disp_num = 0;
+uchar motor_num = 0;
 uchar motor_index = 0, motor_count = 0;
-
+uchar pays = 5;
 ParkInfo idata parkSpace[MAX_SPACE];
+uchar park_space = MAX_SPACE;
+uchar state_change = 1;
 
 void time_inc();
 void opr_key(uchar key_code);
@@ -136,6 +140,8 @@ uchar displayLCDRow(uchar *str, uchar address);
 void displayLCDRowMiddle(uchar *str, uchar address);
 void LcdFullClear();
 void startLineTwinkle(uchar* str, uchar index);
+void LCDLineClear(unsigned char row);
+
 
 /*基础函数库开始*/
 void send_char(unsigned char txd) {
@@ -343,23 +349,53 @@ uchar read_key() {
     return key_code;
 }
 
+void changeMotorState(){
+    if (working_stage == NORMAL){
+        state_change = 1;
+        LCDLineClear(2);
+    }
+
+    switch (motor_stage){
+        case MOTOR_BUSY:{
+            switch (motor_cache){
+                case MOTOR_OPENED:{
+                    motor_stage = MOTOR_CLOSING;
+                    motor_index = (uchar) (MAX_MOTOR_COUNT - motor_index);
+                    motor_count = (uchar) (MAX_MOTOR_CIRCLE - motor_count);
+                    break;
+                }
+                case MOTOR_CLOSED:{
+                    motor_stage = MOTOR_OPENING;
+                    motor_index = (uchar) (MAX_MOTOR_COUNT - motor_index);
+                    motor_count = (uchar) (MAX_MOTOR_CIRCLE - motor_count);
+                    break;
+                }
+                default:break;
+            }
+            break;
+        }
+        case MOTOR_CLOSED:{
+            motor_stage = MOTOR_OPENING;
+            break;
+        }
+        case MOTOR_OPENED:{
+            motor_stage = MOTOR_CLOSING;
+            break;
+        }
+        default:break;
+    }
+}
+
 void scan_emergency(){
     uchar tmp;
     if (RI){
         RI = 0;
         tmp = SBUF;
         if (tmp == 0xff){
-            switch (motor_stage){
-                case MOTOR_CLOSED:{
-                    motor_stage = MOTOR_OPENING;
-                    break;
-                }
-                case MOTOR_OPENED:{
-                    motor_stage = MOTOR_CLOSING;
-                    break;
-                }
-                default:break;
-            }
+            changeMotorState();
+        }else{
+            pays = tmp;
+            state_change = 1;
         }
     }
 }
@@ -368,18 +404,21 @@ void scan_emergency(){
 /* 根据当前状态全局变量给电机提供驱动脉冲 */
 void startMotor(uchar type){
     switch (type){
+        /*道闸关闭状态被激活，电机开启关道闸模式*/
         case MOTOR_CLOSING:{
             motor_cache = MOTOR_CLOSED;
             motor_stage = MOTOR_BUSY;
             MOTOR = FFW[motor_index];
             break;
         }
+        /*道闸开启状态被激活，电机开启开道闸模式*/
         case MOTOR_OPENING:{
             motor_cache = MOTOR_OPENED;
             motor_stage = MOTOR_BUSY;
             MOTOR = REV[motor_index];
             break;
         }
+        /*道闸正忙，接收紧急开关信号*/
         case MOTOR_BUSY:{
             switch (motor_cache){
                 case MOTOR_CLOSED:{
@@ -398,11 +437,16 @@ void startMotor(uchar type){
     }
 
     motor_index++;
+
+    /*电机一共转5圈，随后停止*/
     if (motor_index >= MAX_MOTOR_COUNT) {
         motor_index = 0;
         motor_count++;
         if(motor_count >= MAX_MOTOR_CIRCLE) {
             motor_stage = motor_cache;
+            working_stage = NORMAL;
+            state_change = 1;
+            LcdFullClear();
             motor_count = 0;
         }
     }
@@ -415,15 +459,6 @@ unsigned int getSpace() {
         if (parkSpace[i].used == 0) return i;
     }
     return MAX_SPACE;
-}
-
-/*获取剩余空间数目*/
-unsigned int getSpaceNum() {
-    unsigned char i = 0, count = 0;
-    for (i = 0; i < MAX_SPACE; i++) {
-        if (parkSpace[i].used == 0) count++;
-    }
-    return count;
 }
 
 // 传送字串
@@ -445,18 +480,10 @@ void send_str(unsigned int carID, unsigned int startTime, unsigned int endTime) 
     send_int(time_plus(endTime,SECOND));
     //send_char('-');
     send_char(00);
-
-    /*while(sendStr[i] != '\0') {
-        SBUF = sendStr[i];
-        while(!TI);     // 等特数据传送
-        TI = 0;      // 清除数据传送标志
-        i++;      // 下一个字符
-    }
-    i = 0;*/
 }
 
 void disp_time(){
-    uchar middleAddr = getLCDMiddleByLength(8,LCDRows[3]);
+    uchar middleAddr = 0x9A;
     //char hourcache;
     //sprintf(displayCache, "%02d:%02d:%02d", (uchar)hour, (uchar)minute, (uchar)sec);
     displayCache[0] = (uchar) (hour / 10 + '0');
@@ -470,7 +497,7 @@ void disp_time(){
     displayCache[8] = '\0';
 
     //middleAddr = displayLCDRow(hour, middleAddr);
-    middleAddr = displayLCDRow(displayCache, middleAddr);
+    displayLCDRow(displayCache, middleAddr);
    /* sprintf(strCache, "%02d",minute);
     middleAddr = displayLCDRow((uchar *) strCache, middleAddr);
     middleAddr = displayLCDRow((uchar *) ':', middleAddr);
@@ -481,14 +508,15 @@ void disp_time(){
 
 void park_in(unsigned int id){
     uchar address_cache;
+    state_change = 1;
     LcdFullClear();
     disp_time();
 
     displayLCDRowMiddle(display_welcome[0],LCDRows[0]);
 
     /*显示车牌号*/
-    address_cache = displayLCDRow(display_park_info[0],getLCDMiddleByLength(6,LCDRows[1]));
-    sprintf((char *) displayCache, "%02d", car_id);
+    address_cache = displayLCDRow(display_park_info[0],getLCDMiddleByLength(16,LCDRows[1]));
+    sprintf((char *) displayCache, "%04d", car_id);
     /*
     displayCache[0] = (uchar) (car_id / 10 + '0');
     displayCache[1] = (uchar) (car_id % 10 + '0');
@@ -502,24 +530,20 @@ void park_in(unsigned int id){
         twinkle_row = 2;*/
         //startLineTwinkle(display_park_info[4], 2);
         displayLCDRowMiddle(display_park_info[4], LCDRows[2]);
-        //strcpy(LCDTable3, "车宽超限        ");
-        //strcpy(twinkleCache, display_park_info[4]);
-        //twinkle_row[2] = 1;
+        working_stage = PARK_IN_NOVALID;
     }else{
+        park_space -= 1;
         parkSpace[id].startTime = nowTime;
         parkSpace[id].carID = car_id;
         parkSpace[id].used = 1;
         /*显示车位序号*/
         address_cache = displayLCDRow(display_park_info[1],getLCDMiddleByLength(6,LCDRows[2]));
         sprintf((char *) displayCache, "%d", id + 1);
-        /*displayCache[0] = (uchar) ((id + 1) % 10 + '0');
-        displayCache[1] = '\0';*/
         displayLCDRow(displayCache, address_cache);
-        //sprintf(LCDTable3, "车位:%d",id + 1);
         car_id++;
-        //sprintf(LCDTable4, "    %02d:%02d:%02d    ", hour, minute, sec);
+        working_stage = PARK_IN;
     }
-    working_stage = PARK_IN;
+
     info_num = 0;
     return;
 }
@@ -527,9 +551,11 @@ void park_in(unsigned int id){
 void park_out(unsigned int id){
     unsigned int park_hours,park_minutes,park_seconds;
     uchar address_cache;
+    state_change = 1;
     LcdFullClear();
 
     if (parkSpace[id].used == 1){
+        /*首先判断此停车位是否已经被使用，如果被使用则成功出车*/
         displayLCDRowMiddle(display_welcome[1],LCDRows[0]);
 
         parkSpace[id].endTime = nowTime;
@@ -540,48 +566,23 @@ void park_out(unsigned int id){
 
         /*显示车牌号*/
         address_cache = displayLCDRow(display_park_info[0],LCDRows[1]);
-        sprintf(displayCache, "%03d",parkSpace[id].carID);
+        sprintf(displayCache, "%04d",parkSpace[id].carID);
         displayLCDRow(displayCache, address_cache);
 
         /*停车费用显示*/
         address_cache = displayLCDRow(display_park_info[2],LCDRows[2]);
-        sprintf(displayCache,"%1.2f",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5));
+        sprintf(displayCache,"%1.2f",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * pays / 10));
         displayLCDRow(displayCache, address_cache);
 
         /*停车时间显示*/
         address_cache = displayLCDRow(display_park_info[3],LCDRows[3]);
-       /*displayCache[0] = (uchar) (park_hours / 10 + '0');
-        displayCache[1] = (uchar) (park_hours % 10 + '0');
-        displayCache[2] = ':';
-        displayCache[3] = (uchar) (park_minutes / 10 + '0');
-        displayCache[4] = (uchar) (park_minutes % 10 + '0');
-        displayCache[5] = ':';
-        displayCache[6] = (uchar) (park_seconds / 10 + '0');
-        displayCache[7] = (uchar) (park_seconds % 10 + '0');
-        displayCache[8] = '\0';*/
+        park_space += 1;
         sprintf((char *) displayCache, "%02d:%02d:%02d", park_hours, park_minutes, park_seconds);
         address_cache = displayLCDRow(displayCache, address_cache);
-
-
-
-
-        /*
-        address_cache = displayLCDRow((uchar *) strCache, address_cache);
-        address_cache = displayLCDRow((uchar *) ':', address_cache);
-
-        sprintf(strCache, "%02d", park_minutes);
-        address_cache = displayLCDRow((uchar *) strCache, address_cache);
-        address_cache = displayLCDRow((uchar *) ':', address_cache);
-
-        sprintf(strCache, "%02d", park_seconds);
-        address_cache = displayLCDRow((uchar *) strCache, address_cache);*/
-
-        //sprintf(LCDTable1, "车牌号:%03d", parkSpace[id].carID);
-        //sprintf(LCDTable2, "  应付费：%1.2f  ",(float) ((parkSpace[id].endTime - parkSpace[id].startTime) * 0.5));
-       // sprintf(LCDTable3, "停车时间%02d:%02d:%02d", park_hours, park_minutes, park_seconds);
         send_str(parkSpace[id].carID,  parkSpace[id].startTime, parkSpace[id].endTime);
         working_stage = PARK_OUT;
     }else{
+        /*停车位未被使用，显示相关提示信息*/
         disp_time();
         displayLCDRowMiddle(display_welcome[0],LCDRows[0]);
 
@@ -590,21 +591,20 @@ void park_out(unsigned int id){
         displayLCDRowMiddle(display_space[2],LCDRows[1]);
         //twinkle_row[1] = 1;
         working_stage = PARK_OUT_EMPTY;
+        info_num = 0;
         //strcpy(twinkleCache, display_space[2]);
     }
 
-    info_num = 0;
+
     return;
 }
 
 void waiting() {
-    unsigned int park_space = getSpaceNum();
     uchar address_cache;
-    if (working_stage == NORMAL) {
-        LcdFullClear();
-        disp_time();
+    if (working_stage == NORMAL && state_change == 1) {
+        //LcdFullClear();
+        state_change = 0;
         displayLCDRowMiddle(display_welcome[0],LCDRows[0]);
-
         if (park_space <= 0) {
             displayLCDRowMiddle(display_space[0],LCDRows[1]);
             //startLineTwinkle(display_space[0], 1);
@@ -613,7 +613,9 @@ void waiting() {
             twinkle_row[1] = 1;*/
         } else {
             address_cache = displayLCDRow(display_space[1],LCDRows[1]);
-            sprintf((char *) displayCache, "%d", park_space);
+            displayCache [0] =  (uchar) (park_space % 10 + '0');
+            displayCache [1] = '\0';
+            //sprintf((char *) displayCache, "%d", park_space);
             displayLCDRow(displayCache, address_cache);
 
 
@@ -622,17 +624,27 @@ void waiting() {
 
             //sprintf(LCDTable2, "剩余车位：%d     ", park_space);
         }
-        if (motor_stage == MOTOR_BUSY) {
-            displayLCDRowMiddle(display_space[3],LCDRows[2]);
 
+        if (motor_stage == MOTOR_BUSY) {
+           // LCDLineClear(2);
+            displayLCDRowMiddle(display_space[3],LCDRows[2]);
+            state_change = 0;
            // twinkleIndex = 2;
             //twinkle_row = 2;
 
             //startLineTwinkle(display_space[3], 2);
            /* displayLCDRowMiddle(display_space[3],LCDRows[2]);
             twinkle_row[2] = 1;*/
+        }else{
+            //LCDLineClear(2);
+            address_cache = displayLCDRow(display_welcome[3],LCDRows[2]);
+            sprintf(displayCache,"%1.2f",(float) pays / 10);
+            displayLCDRow(displayCache, address_cache);
+            displayLCDRow(display_welcome[4], 0x8D);
+            state_change = 0;
         }
-    }else if (working_stage != PARK_OUT){
+    }
+    if (working_stage != PARK_OUT && working_stage != PARK_OUT_MOTOR){
         disp_time();
     }
 }
@@ -667,35 +679,23 @@ void opr_key(uchar key_code) {
             break;
         }
         case 12: {
-            switch (motor_stage){
-                case MOTOR_BUSY:{
-                    switch (motor_cache){
-                        case MOTOR_OPENED:{
-                            motor_stage = MOTOR_CLOSING;
-                            motor_index = (uchar) (MAX_MOTOR_COUNT - motor_index);
-                            motor_count = (uchar) (MAX_MOTOR_CIRCLE - motor_count);
-                            break;
-                        }
-                        case MOTOR_CLOSED:{
-                            motor_stage = MOTOR_OPENING;
-                            motor_index = (uchar) (MAX_MOTOR_COUNT - motor_index);
-                            motor_count = (uchar) (MAX_MOTOR_CIRCLE - motor_count);
-                            break;
-                        }
-                        default:break;
-                    }
+            switch (working_stage){
+                case PARK_IN:{
+                    working_stage = PARK_IN_MOTOR;
+                    //LCDLineClear(0);
+                    displayLCDRowMiddle(display_welcome[2],LCDRows[0]);
                     break;
                 }
-                case MOTOR_CLOSED:{
-                    motor_stage = MOTOR_OPENING;
-                    break;
-                }
-                case MOTOR_OPENED:{
-                    motor_stage = MOTOR_CLOSING;
+                case PARK_OUT:{
+                    working_stage = PARK_OUT_MOTOR;
+                    //LCDLineClear(0);
+                    displayLCDRowMiddle(display_welcome[2],LCDRows[0]);
                     break;
                 }
                 default:break;
             }
+
+            changeMotorState();
         }
         default: break;
     }
@@ -720,13 +720,7 @@ void writeCom_12864(uchar com) {
     RW_LCD = 0;
     DATA_LCD = com;
     EN_LCD = 1;
-    _nop_();
-    _nop_();
-    _nop_();
-    _nop_();
-    _nop_();
-    _nop_();
-    //delay_us(50);    //50us使能延时!!!注意这里，如果是较快的CPU应该延时久一些
+    delay_us(50);    //50us使能延时!!!注意这里，如果是较快的CPU应该延时久一些
     EN_LCD = 0;
 }
 
@@ -735,13 +729,9 @@ void writeData_12864(uchar dat) {
     //busyCheck_12864();
     RS_LCD = 1;
     RW_LCD = 0;
-    _nop_();
-    _nop_();
     DATA_LCD = dat;
     EN_LCD = 1;
-    _nop_();
-    _nop_();
-    //delay_us(50);    //50us使能延时!!!注意这里，如果是较快的CPU应该延时久一些
+    delay_us(50);    //50us使能延时!!!注意这里，如果是较快的CPU应该延时久一些
     EN_LCD = 0;
 }
 
@@ -761,29 +751,29 @@ void init_LCD(void) {
     writeCom_12864(0x0C);   //开显示，无光标，光标不闪烁
 }
 
-void LCDLineClear(unsigned char line) {
-    unsigned char len=16;
-    writeCom_12864(LCDRows[line]);
+void LCDLineClear(unsigned char row) {
+    uchar len=16;
+    writeCom_12864(LCDRows[row]);
     while (len--) {
         writeData_12864(0x20);
     }
 }
 
-void clr_twinkle(){
+/*void clr_twinkle(){
     twinkle_row = TWINKLE_ROW_NUM;
     return;
-}
+}          */
 
 void LcdFullClear() {
     writeCom_12864(0x01);
-    clr_twinkle();
+    //clr_twinkle();
 }
 /*void startLineTwinkle(uchar* str, uchar index) {
     sprintf(displayCache, str);
     twinkle_row = index;
     return;
 }*/
-void LCDLineTwinkle() {
+/*void LCDLineTwinkle() {
     static bit flag = 0;
     static uchar time = 0;
     if (twinkle_row == TWINKLE_ROW_NUM) return;
@@ -795,40 +785,11 @@ void LCDLineTwinkle() {
     time++;
 
     /*LCD某些行闪烁时间控制*/
-    if (time >= TWINKLE_FREQ) {
+    /*if (time >= TWINKLE_FREQ) {
         flag = ~flag;
         time = 0;
     }
-}
-   /*
-   //反白，X值为0－7，Y值为0－3，width为行反白格数
-   void photodisplay(uchar x,uchar y,uchar width) {
-       uchar i,j,flag=0x00;
-       if(y>1) {
-           flag=0x08;
-           y=y-2;
-       }
-       writeCom_12864(0x34); //写数据时,关闭图形显示,且打开扩展指令集
-       for(i=0;i<16;i++) {
-           writeCom_12864(0x80+(y<<4)+i);
-           writeCom_12864(0x80+flag+x);
-           for(j=0;j<width;j++) {
-               writeData_12864(0xff);
-               writeData_12864(0xff);
-           }
-           delay_us(1);
-       }
-       writeCom_12864(0x36); //写完数据,开图形显示
-       writeCom_12864(0x30); //从扩展指令到基本指令
-   }
-   */
-
-/*void LCDLineClear(unsigned char x) {
-    unsigned char len=16;
-    while (len--) {
-        writeData_12864(' ');
-    }
-}*/
+} */
 
 uchar getLCDMiddleByLength (uchar length, uchar address){
     uchar middle_addr = address;
@@ -846,16 +807,21 @@ uchar getLCDMiddleByStr (uchar *str, uchar address){
    return middle_addr;
 }
 uchar displayLCDRow(uchar *str, uchar address){
-   uchar i = 0;
+   uchar i = 0, length = 0;
    writeCom_12864(address);
    while (*str != '\0') {
-       writeData_12864(*str++);
+       writeData_12864(*str);
+       str++;
        i++;
+       length++;
        if (i == 2){
            i = 0;
            address++;
        }
    }
+   /* for(;length<16;length++){
+        writeData_12864(0x20);
+    }*/
    return address;
 }
 /*注意这个函数只能输入行首地址！！！*/
@@ -864,81 +830,6 @@ void displayLCDRowMiddle(uchar *str, uchar address){
     displayLCDRow(str,addr);
     return;
 }
-
-/*
-void displayLCD(void) {
-    static uchar time = 0, flag = 0;
-    unsigned int i;
-    writeCom_12864(0x01);   //清屏，并且DDRAM数据指针清零
-    //delay_us(10);
-    writeCom_12864(0x80);
-    for(i = 0; i < 16; i++){
-        if(twinkle_row[0] == 1){
-            if (flag == 0) {
-                writeData_12864(LCDTable1[i]);
-            } else {
-                writeData_12864(0x20);
-            }
-        }else{
-            writeData_12864(LCDTable1[i]);
-        }
-    }
-    _nop_();
-    _nop_();
-
-    writeCom_12864(0x90);
-    for(i = 0; i < 16; i++){
-        if(twinkle_row[1] == 1){
-            if (flag == 0) {
-                writeData_12864(LCDTable2[i]);
-            } else {
-                writeData_12864(0x20);
-            }
-        }else{
-            writeData_12864(LCDTable2[i]);
-        }
-    }
-    _nop_();
-    _nop_();
-
-    writeCom_12864(0x88);
-    for (i = 0; i < 16; i++) {
-        if(twinkle_row[2] == 1){
-            if (flag == 0) {
-                writeData_12864(LCDTable3[i]);
-            } else {
-                writeData_12864(0x20);
-            }
-        }else{
-            writeData_12864(LCDTable3[i]);
-        }
-    }
-    _nop_();
-    _nop_();
-    writeCom_12864(0x98);
-    for (i = 0; i < 16; i++) {
-        if(twinkle_row[3] == 1){
-            if (flag == 0) {
-                writeData_12864(LCDTable4[i]);
-            } else {
-                writeData_12864(0x20);
-            }
-        }else{
-            writeData_12864(LCDTable4[i]);
-        }
-    }
-    _nop_();
-    _nop_();
-    time++;
-
-    /*LCD某些行闪烁时间控制*/
- /*   if (time >= TWINKLE_FREQ) {
-        flag = ~flag;
-        time = 0;
-    }
-}
-*/
-
 
 void init_settings() {
     uchar i = 0;
@@ -970,7 +861,7 @@ void init_com_send() {
     TH1 = 0xF3;
     TL1 = 0xF3;
     SCON = 0x50;
-    PCON &= 0xEF;
+    PCON &= 0x7F;
 }
 
 void startADC(void){
@@ -1005,22 +896,22 @@ unsigned char readADC(void){
 void start() //I2C启动函数
 //开始位
 {
-    SDA = 1; //使能 SDA
-    SCL = 1;
+    RD_SDA = 1; //使能 RD_SDA
+    WR_SCL = 1;
     delayNOP();
-    SDA = 0;
+    RD_SDA = 0;
     delayNOP();
-    SCL = 0;
+    WR_SCL = 0;
 }
 
 void stop() //I2C停止函数
 // 停止位
 {
-    SDA = 0;
+    RD_SDA = 0;
     delayNOP();
-    SCL = 1;
+    WR_SCL = 1;
     delayNOP();
-    SDA = 1;
+    RD_SDA = 1;
 }
 
 bit shout(uchar write_data)
@@ -1030,19 +921,19 @@ bit shout(uchar write_data)
     bit ack_bit;
     for(i = 0; i < 8; i++) // 循环移入8个位
     {
-        SDA = (bit)(write_data & 0x80);
+        RD_SDA = (bit)(write_data & 0x80);
         _nop_();
-        SCL = 1;
+        WR_SCL = 1;
         delayNOP();
-        SCL = 0;
+        WR_SCL = 0;
         write_data <<= 1;
     }
-    SDA = 1; // 读取应答
+    RD_SDA = 1; // 读取应答
     delayNOP();
-    SCL = 1;
+    WR_SCL = 1;
     delayNOP();
-    ack_bit = SDA;
-    SCL = 0;
+    ack_bit = RD_SDA;
+    WR_SCL = 0;
     return ack_bit; // 返回AT24C02应答位
 }
 
@@ -1068,10 +959,10 @@ uchar shin()
     uchar i,read_data;
     for(i = 0; i < 8; i++)
     {
-        SCL = 1;
+        WR_SCL = 1;
         read_data <<= 1; //数据左移一位
-        read_data |= SDA;
-        SCL = 0;
+        read_data |= RD_SDA;
+        WR_SCL = 0;
     }
     return(read_data);
 }
@@ -1119,7 +1010,10 @@ void storeData(){
     write_byte(2, sec);
     write_int(3, nowTime);
     write_int(5, car_id);
-    j = 7;
+    write_byte(7, pays);
+    write_byte(8, park_space);
+
+    j = 9;
     for (i = 0; i < MAX_SPACE; i++) {
         write_int(j, parkSpace[i].startTime);
         j+=2;
@@ -1136,13 +1030,14 @@ void storeData(){
 void recoverData(){
     unsigned int i = 0;
     uchar j = 0;
-    /*hour = read_random(0);
+    hour = read_random(0);
     minute = read_random(1);
-    sec = read_random(2);*/
+    sec = read_random(2);
     nowTime = read_random_int(3);
     car_id = read_random_int(5);
-
-    j = 7;
+    pays = read_random(7);
+    park_space = read_random(8);
+    j = 9;
     for (i = 0; i < MAX_SPACE; i++) {
         parkSpace[i].startTime = read_random_int(j);
         j+=2;
@@ -1153,18 +1048,22 @@ void recoverData(){
         parkSpace[i].carID = read_random_int(j);
         j+=2;
     }
+    hour_begin = hour;
+    minute_begin = minute;
+    sec_begin = sec;
     return;
 }
 
 void int0() interrupt 1{
     time_num++;
-    disp_num++;
+    //disp_num++;
     info_num++;
     motor_num++;
 
     if (time_num >= TIME_FREQ) {
         time_num = 0;
         time_inc();
+        waiting();
         nowTime++;
         //LCDLineTwinkle();
         /*掉电保护*/
@@ -1173,19 +1072,20 @@ void int0() interrupt 1{
             writeCom_12864(0x0C);
             car_wide = readADC();
         }
+
         //write_byte(3,222);
         //read_random(55);
-        /*SCL = 0;
+        /*WR_SCL = 0;
         write_byte(3,222);
         read_random(55); //读取单片机复位次数*/
     }
 
-    if (disp_num >= DISP_FREQ) {
-        waiting();
+    /*if (disp_num >= DISP_FREQ) {
+
         //disp_time();
         //car_wide = readADC();
         disp_num = 0;
-    }
+    }*/
 
     if (motor_num >= MOTOR_FREQ) {
         startMotor(motor_stage);
@@ -1193,9 +1093,11 @@ void int0() interrupt 1{
     }
 
 
-    if (info_num >= INFO_SHOW_FREQ) {
+    if (info_num >= INFO_SHOW_FREQ && (working_stage == PARK_OUT_EMPTY || working_stage == PARK_IN_NOVALID)) {
         working_stage = NORMAL;
         info_num = 0;
+        state_change = 1;
+        LcdFullClear();
     }
 
     interrupt0();
@@ -1215,7 +1117,6 @@ void main() {
     init_timer0();
     init_com_send();
     startADC();
-
     while (1) {
 
     }

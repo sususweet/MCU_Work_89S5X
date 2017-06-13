@@ -136,8 +136,7 @@ unsigned int read_key() {
     return key_code;
 }
 
-
-
+/*定时器0初始化，定时器1初始化为波特率发生器，波特率为2400*/
 int main(void){
     TMOD = 0x21;
     EA = 1;
@@ -150,7 +149,7 @@ int main(void){
     TH1 = 0xF3;
     TL1 = 0xF3;
     SCON = 0x50;
-    PCON &= 0xEF;
+    PCON &= 0x7F;
     TR1 = 1;
     ES = 0;
     ET1 = 0;
@@ -160,6 +159,7 @@ int main(void){
     return 0;
 }
 
+/*串行口发送字符*/
 void send_char(unsigned char txd){
     SBUF = txd;
     while(!TI);

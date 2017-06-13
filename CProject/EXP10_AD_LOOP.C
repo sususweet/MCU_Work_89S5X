@@ -10,6 +10,7 @@ void delay_ms(unsigned int ms);
 void send_char(unsigned char txd);
 void initSend();
 
+/*开始AD转换*/
 void startADC(void){
     AD_WR = 1;
     _nop_();
@@ -20,6 +21,7 @@ void startADC(void){
     AD_WR = 1;
 }
 
+/*读取AD转换数据*/
 unsigned char readADC(void){
     unsigned char output;
     AD_INPUT = 0xff;
@@ -40,7 +42,7 @@ int main(void){
     unsigned char tmp;
     startADC();
     initSend();
-
+    /*通过循环方式读取AD转换数据并上传*/
     while (1){
         delay_ms(1);
         tmp = readADC();
@@ -55,11 +57,12 @@ void initSend(){
     TH1 = 0xF3;
     TL1 = 0xF3;
     SCON = 0x50;
-    PCON &= 0xEF;
+    PCON &= 0x7F;
     TR1 = 1;
     IE = 0x0;
 }
 
+/*串行口发送字符*/
 void send_char(unsigned char txd) {
     SBUF = txd;
     while (!TI);
